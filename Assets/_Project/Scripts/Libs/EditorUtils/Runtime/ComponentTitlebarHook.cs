@@ -1,0 +1,109 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
+using Unity.Profiling;
+using UnityEngine;
+using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
+namespace FS.UtilityEditor
+{
+	/// <summary>
+	/// Credit to [https://github.com/mitay-walle/ComponentTitlebarGUI/tree/main]
+	/// </summary>
+	public static class ComponentTitlebarGUI
+	{
+		public static Action<Rect, Object> OnTitlebarGUI;
+
+#if UNITY_EDITOR
+		private static ProfilerMarker _profileMarker = new ProfilerMarker($"{nameof(ComponentTitlebarGUI)}.{nameof(OnUpdate)}");
+		private static ProfilerMarker _profileMarker2 = new ProfilerMarker($"{nameof(ComponentTitlebarGUI)}.OnTitlebarGUI");
+		private static Type type = typeof(EditorWindow).Assembly.GetType("UnityEditor.InspectorWindow");
+		private static Type type2 = typeof(EditorWindow).Assembly.GetType("UnityEditor.PropertyEditor");
+		private static Type type3 = typeof(EditorWindow).Assembly.GetType("UnityEditor.UIElements.EditorElement");
+		private static FieldInfo field = type2.GetField("m_EditorsElement", BindingFlags.NonPublic | BindingFlags.Instance);
+		private static FieldInfo field2 = type3.GetField("m_Header", BindingFlags.NonPublic | BindingFlags.Instance);
+		private static FieldInfo field3 = type3.GetField("m_EditorTarget", BindingFlags.NonPublic | BindingFlags.Instance);
+		private static VisualElement m_EditorsElement;
+		private static VisualElement editorsElement => m_EditorsElement ??= GetEditorVisualElement();
+		private static Dictionary<VisualElement, Action> _callbacks = new();
+
+		private static VisualElement GetEditorVisualElement()
+		{
+			EditorWindow window = EditorWindow.GetWindow(type);
+			if (window)
+			{
+				return field.GetValue(window) as VisualElement;
+			}
+
+			return null;
+		}
+
+		[InitializeOnLoadMethod]
+		public static void Init()
+		{
+			EditorApplication.update -= OnUpdate;
+			EditorApplication.update += OnUpdate;
+			Selection.selectionChanged -= OnSelectionChanged;
+			Selection.selectionChanged += OnSelectionChanged;
+		}
+
+		private static void OnSelectionChanged() => _callbacks.Clear();
+
+		private static void OnUpdate()
+		{
+			using (_profileMarker.Auto())
+			{
+				VisualElement inspectorRoot = editorsElement;
+				if (inspectorRoot == null) return;
+
+				var foundAll = editorsElement.Children();
+				foreach (VisualElement element in foundAll)
+				{
+					if (element.GetType() != type3) continue;
+
+					var localTarget = field3.GetValue(element) as Object;
+					if (localTarget)
+					{
+						IMGUIContainer value2 = field2.GetValue(element) as IMGUIContainer;
+						Action callback = null;
+						if (_callbacks.TryGetValue(element, out var found))
+						{
+							callback = found;
+						}
+						else
+						{
+							callback = _callbacks[element] = MyLocalCallback;
+						}
+
+						if (value2 != null)
+						{
+							value2.onGUIHandler -= callback;
+							value2.onGUIHandler += callback;
+						}
+
+						void MyLocalCallback()
+						{
+							using (_profileMarker2.Auto())
+							{
+								try
+								{
+									OnTitlebarGUI?.Invoke(GUILayoutUtility.GetLastRect(), localTarget);
+								}
+								catch (Exception e)
+								{
+									Debug.LogException(e);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+#endif
+	}
+}
