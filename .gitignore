@@ -1,0 +1,28 @@
+# Ignore everything
+*
+
+# But not these
+!*.cs
+!*.pdf
+!*.md
+!*.txt
+!*.shader
+!*.hlsl
+!*.compute
+
+# Keep folder structure (add for each folder you need)
+!*/
+
+# Don't forget the gitignore itself
+!.gitignore
+
+# Ignore external items and packages
+Assets/_External/
+Assets/Plugins/
+Library/
+obj/
+
+# Packages - ignore contents of non-matching folders
+Packages/*
+!Packages/com.abdulal*/
+!Packages/com.abdulal*/**
