@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using FS.RuntimeDebug;
+using FS.Utility;
 using Rewired;
 using Sirenix.Utilities;
 using TimeUtils;
@@ -187,8 +189,50 @@ namespace FS.Player
         
         public double TimeHeld(GameInput id) => IsValidInput(id) ? m_inputController.GetButtonTimePressed((int)id) : 0f;
         
-        public Vector2 MoveVector => IsMoveInputEnabled && IsInputEnabled ? m_inputController.GetAxis2D("Move Horizontal", "Move Vertical") : Vector2.zero;
-        public Vector2 LookVector => IsInputEnabled ? m_inputController.GetAxis2D("Look Horizontal", "Look Vertical") : Vector2.zero;
+        public Vector2 MoveVector => IsMoveInputEnabled && IsInputEnabled ? ApplyMoveDeadZone(m_inputController.GetAxis2D("Move Horizontal", "Move Vertical")) : Vector2.zero;
+        public Vector2 LookVector => IsInputEnabled ? ApplyLookDeadZone(m_inputController.GetAxis2D("Look Horizontal", "Look Vertical")) : Vector2.zero;
+
+        private Vector2 ApplyMoveDeadZone(Vector2 moveInput) => RadialDeadZone(AxialDeadZone(moveInput));
+
+        private Vector2 ApplyLookDeadZone(Vector2 lookInput) => GetControllerType() == ControllerType.Gamepad ? RadialDeadZone(AxialDeadZone(lookInput)) : lookInput;
+
+        private const float k_deadzone = 0.1f;
+        // Utility funcs
+        public Vector2 RadialDeadZone(Vector2 input)
+        {
+            if (input.SqrMagnitude() < k_deadzone * k_deadzone) return Vector2.zero;
+            return input;
+        }
+
+        public Vector2 AxialDeadZone(Vector2 input)
+        {
+            if (Mathf.Abs(input.x) < k_deadzone) input.x = 0;
+            if (Mathf.Abs(input.y) < k_deadzone) input.y = 0;
+            return input;
+        }
+
+        #region Input Feeding
+
+        private CustomController DebugController => ReInput.controllers.GetCustomController(0); // Fixed index
+
+        public void InjectMoveInput(Vector2 move)
+        {
+            var controller = DebugController;
+            controller.SetAxisValue("Move Horizontal", move.x);
+            controller.SetAxisValue("Move Vertical", move.y);
+        }
+
+        public void InjectLookInput(Vector2 look)
+        {
+            var controller = DebugController;
+            controller.SetAxisValue("Look Horizontal", look.x);
+            controller.SetAxisValue("Look Vertical", look.y);
+        }
+
+        public void InjectButtonInput(GameInput action, bool val = true) => InjectButtonInput(action.ToString(), val);
+        public void InjectButtonInput(string action, bool val = true) => DebugController.SetButtonValue(action, val);
+
+        #endregion
     }
 #endregion    
 }

@@ -4,6 +4,12 @@ using FS.Math;
 using FS.RuntimeDebug;
 using UnityEngine;
 
+public class WallSlideConstraint : ActionConstraintBase
+{
+    // Presumably could put this in lEdgeClimb to make sure we dsont attempt it at a wall we're sliding on
+    public override bool EvaluateConstraint(GameplayAction action) => action is not LedgeClimbAction;
+}
+
 public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsReciever, IDebugProvider
 {
     public enum State
@@ -21,6 +27,9 @@ public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsRe
     [RuntimeData] private TimeSince m_timeSinceWallJumped;
     [RuntimeData] private RaycastHit m_wallInfo;
 
+    public override ActionConstraintBase DefaultConstraint => m_constraint;
+    private readonly WallSlideConstraint m_constraint = ActionConstraintBase.Create<WallSlideConstraint>("Wall Slide Constraint");
+
     protected override bool StartCondition()
     {
         return m_physics.State == PhysicsState.Air && m_timeSinceEnded > 0.2f && DoWallFeeler(); // arbitrary cooldown
@@ -28,26 +37,39 @@ public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsRe
     
     public bool DoWallFeeler()
     {
-        float minTraceDist = 1f;
-        float minWallEnterAngle = 20f;
+        // Wanna trace radially along the semi-circle on our forward plane (we trace further than our valid dist but then do a dist check)
+        float wallTraceDist = 4f;
+        float validWallDist = 2f;
+        float minEntryAngle = 25f; // The minimum angle between our -vel and the wall normal, below this we consider we went head-first into the wall
         float sweepRadius = m_physics.CapsuleRadius / 1.1f; // shrink it a bit
-        
+
+        bool shouldDoFullSweep = !IsActive || m_state == State.Jump;
         Vector3 traceDir = Vector3.zero;
-        var startPos = m_physics.transform.position;
-        var rightDir = m_physics.transform.right;
-        var leftDir = -rightDir;
+        var startPos = m_physics.CenterPosition;
+        var rightDir = !shouldDoFullSweep ? -m_wallInfo.normal : m_physics.transform.right;
 
         RaycastHit wallHit;
         
         // Right to left trace rotation sliced
-        int numTraces = 4;
+        int numTraces = !shouldDoFullSweep ? 0 : 4;
         bool anyHit = false;
         for (int i = 0; i <= numTraces; i++)
         {
-            float t = (float)i / (float)numTraces;
+            float t = shouldDoFullSweep ? (float)i / (float)numTraces : 0f;
             Vector3 dir = Quaternion.AngleAxis(180f * t, m_physics.transform.up) * rightDir;
-            if (Physics.SphereCast(startPos, sweepRadius, dir, out wallHit, minTraceDist, 1 << PhysicsLayers.WallSlide))
+            if (Physics.SphereCast(startPos, sweepRadius, dir, out wallHit, wallTraceDist, 1 << PhysicsLayers.WallSlide))
             {
+                if (wallHit.distance > validWallDist) continue;
+                
+                // If we're in wall-jump, don't allow reentry on the same wall dir
+                if (IsActive && m_state == State.Jump)
+                {
+                    if (wallHit.normal.Dot(m_wallInfo.normal) > 0.5f) continue;
+                }
+                
+                //var angle = Vector3.Angle(wallHit.normal, -m_physics.LateralVelocity.normalized);
+                //if (angle < minEntryAngle) continue;
+                
                 traceDir = dir;
                 m_wallInfo = wallHit;
                 anyHit = true;
@@ -63,17 +85,10 @@ public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsRe
         
         // Ensure wall normal is not walkable
         if (m_physics.IsHitStableGround(m_wallInfo)) return false;
-
-        // Out head & Feet should hit w/ sphere casts
-        //bool isHeadHitValid = Physics.SphereCast(m_physics.HeadPosition, sweepRadius, traceDir, out _, minTraceDist, 1 << PhysicsLayers.WallSlide);
-        //if (!isHeadHitValid) return false;
-        //bool isFeetHitValid = Physics.SphereCast(m_physics.FootPosition, sweepRadius, traceDir, out _, minTraceDist, 1 << PhysicsLayers.WallSlide);
-        //if (!isFeetHitValid) return false;
-        
         
         // Ensure planar speed against the wall isn't zero
-        var lateralVel = m_physics.Velocity.ProjectOnPlane(m_wallInfo.normal).ProjectOnPlane(m_physics.GravityDir);
-        if (lateralVel.sqrMagnitude < 1f) return false; // we're barely moving along the wall, not enough to initiate a slide'
+        //var lateralVel = m_physics.Velocity.ProjectOnPlane(m_wallInfo.normal).ProjectOnPlane(m_physics.GravityDir);
+        //if (lateralVel.sqrMagnitude < 1f) return false; // we're barely moving along the wall, not enough to initiate a slide'
 
         
         return true;
@@ -85,7 +100,7 @@ public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsRe
         {
             var wallPointAlongNormal = m_wallInfo.point.ProjectOnto(WallNormal);
             var physPosAlongNormal = m_physics.transform.position.ProjectOnto(WallNormal);
-            return ((wallPointAlongNormal - physPosAlongNormal).Dot(WallNormal)) + 1.1f * m_physics.CapsuleRadius;
+            return ((wallPointAlongNormal - physPosAlongNormal).Dot(WallNormal)) + 1.5f * m_physics.CapsuleRadius;
         }
     }
     
@@ -97,7 +112,7 @@ public class WallSlide : GameplayAction, IActionUpdateReciever, IActionPhysicsRe
     {
         m_state = State.Slide;
         m_gravityPhaseTimer = 0;
-        m_physics.Velocity = m_physics.Velocity.ProjectOnPlane(WallNormal).normalized * m_physics.Velocity.magnitude; // Remove any velocity into the wall
+        //m_physics.Velocity = m_physics.transform.forward.ProjectOnPlane(Vector3.up).ProjectOnPlane(WallNormal).normalized * Mathf.Max(12, m_physics.Velocity.magnitude); // Remove any velocity into the wall
     }
 
 

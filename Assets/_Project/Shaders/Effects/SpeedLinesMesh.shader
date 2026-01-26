@@ -1,4 +1,4 @@
-﻿Shader "FreeSkies/Effects/SpeedLines"
+﻿Shader "FreeSkies/Effects/SpeedLinesMesh"
 {
     SubShader
     {

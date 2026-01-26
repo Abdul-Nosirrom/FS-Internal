@@ -1,4 +1,5 @@
-﻿using Drawing;
+﻿using System;
+using Drawing;
 using UnityEngine;
 using PrimeTween;
 using Sirenix.OdinInspector;
@@ -7,11 +8,12 @@ using TimeUtils;
 namespace FS.CameraSystem
 {
     #region Blending
-    public readonly struct CameraBlendParams
+    [Serializable]
+    public struct CameraBlendParams
     {
-        public readonly float m_duration;
-        public readonly Ease m_blendFunction;
-        public readonly bool m_shouldLockOutgoing;
+        public float m_duration;
+        public Ease m_blendFunction;
+        public bool m_shouldLockOutgoing;
 
         public static readonly CameraBlendParams Default 
             = Create(0.25f, Ease.InOutQuad, false);

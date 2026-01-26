@@ -1,4 +1,6 @@
-﻿using Sirenix.OdinInspector;
+﻿using System;
+using System.Collections.Generic;
+using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace FS.CameraSystem
@@ -18,6 +20,8 @@ namespace FS.CameraSystem
         [Required, SerializeField, HideInInspector] 
         private Camera m_camera;
         public CameraState m_cameraState;
+
+        private GameObject m_cameraOwner;
         
 #if UNITY_EDITOR
         private void OnValidate()
@@ -38,6 +42,7 @@ namespace FS.CameraSystem
             Gizmos.color = originalColor;
         }
 #endif
+        private List<VirtualCameraMode> m_cameraBehaviors = new List<VirtualCameraMode>();
 
         private void Awake()
         {
@@ -52,6 +57,65 @@ namespace FS.CameraSystem
             {
                 m_cameraState = new CameraState();
             }
+
+            DeactivateCamera();
+
+            GetComponentsInChildren(m_cameraBehaviors);
+
+            foreach (var camBeh in m_cameraBehaviors) camBeh.Initialize(this);
         }
+
+        public event Action OnCameraActivated;
+        public event Action OnCameraDeactivated;
+        
+        public GameObject Owner => m_cameraOwner;
+
+        public void ActivateCamera(GameObject owner)
+        {
+            enabled = true;
+            m_cameraOwner = owner; // TODO: For local-multiplayer, this won't work if 2 players enter the same volume
+            OnCameraActivated?.Invoke();
+        }
+
+        public void DeactivateCamera()
+        {
+            enabled = false;
+            OnCameraDeactivated?.Invoke();
+        }
+
+        private void LateUpdate()
+        {
+            foreach (var cameraStateBehavior in m_cameraBehaviors)
+            {
+                cameraStateBehavior.UpdateCamera();
+            }
+        }
+    }
+
+    public abstract class VirtualCameraMode : MonoBehaviour
+    {
+        protected VirtualCamera m_camera;
+        protected GameObject m_cameraOwner => m_camera.Owner;
+        protected CameraState cameraState => m_camera.m_cameraState;
+        
+        public void Initialize(VirtualCamera virtualCamera)
+        {
+            m_camera = virtualCamera;
+            m_camera.OnCameraActivated += OnCameraActivated;
+            m_camera.OnCameraDeactivated += OnCameraDeactivated;
+        }
+        
+        protected virtual void OnDestroy()
+        {
+            if (m_camera != null)
+            {
+                m_camera.OnCameraActivated -= OnCameraActivated;
+                m_camera.OnCameraDeactivated -= OnCameraDeactivated;
+            }
+        }
+
+        protected abstract void OnCameraActivated();
+        public abstract void UpdateCamera();
+        protected abstract void OnCameraDeactivated();
     }
 }

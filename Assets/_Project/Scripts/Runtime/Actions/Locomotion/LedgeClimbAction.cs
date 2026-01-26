@@ -5,6 +5,8 @@ using FS.GameplayActions;
 using FS.Math;
 using FS.MeshProcessing;
 using Lightbug.Utilities;
+using PrimeTween;
+using TimeUtils;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -32,6 +34,8 @@ public class LedgeClimbAction : GameplayAction, IActionUpdateReciever, IActionPh
     private LedgeClimbConstraint m_ledgeClimbConstraint = ActionConstraintBase.Create<LedgeClimbConstraint>("LedgeClimbConstraint");
 
     private bool m_jumpRequested = false;
+
+    private TimeUntil m_cooldownTime;
     
     public override void OnInitialize(GameObject owner)
     {
@@ -87,6 +91,8 @@ public class LedgeClimbAction : GameplayAction, IActionUpdateReciever, IActionPh
 
     protected override bool StartCondition()
     {
+        if (m_cooldownTime > 0f) return false;
+        
         bool ledgesDetected = TryDetectLedges();
         // Are we falling? (if we're railgrinding, dont check for falling)
         if (m_physics.IsGrounded || (m_physics.Velocity.Dot(m_physics.GravityDir) < 0 && m_physics.State != PhysicsState.RailGrind))
@@ -136,7 +142,26 @@ public class LedgeClimbAction : GameplayAction, IActionUpdateReciever, IActionPh
 
         m_jumpRequested = false;
     }
-    
+
+    public override void OnEnd()
+    {
+        // Fade out ledge grab animation if its not ledge jump
+        if (m_ledgeClimbAnimation.TryGetState(m_animator, out var ledgeState) && ledgeState is ControllerState ledgeMecanimState)
+        {
+            if (!m_jumpRequested) // Hacky but accurate for our setup
+            {
+                m_ledgeClimbAnimation.Stop(m_animator, 0.4f);
+            }
+        }
+        
+        // Setup our constraint to run for a lil-bit more
+        m_ledgeClimbConstraint.EnableConstraint(); // TODO: Race condition on DefaultConstraint Disable/Enable?
+        Tween.Delay(0.35f, () =>
+        {
+            if (!IsActive) m_ledgeClimbConstraint.DisableConstraint();
+        });
+    }
+
     public void PosUpdate()
     {
         if (m_physics.IsGrounded) EndAction();
@@ -166,6 +191,7 @@ public class LedgeClimbAction : GameplayAction, IActionUpdateReciever, IActionPh
             }
             else
             {
+                m_jumpRequested = true;
                 var platformVel = m_ledgeGroundHit.IsRigidbody
                     ? m_ledgeGroundHit.rigidbody3D.GetPointVelocity(m_physics.Position)
                     : Vector3.zero;
@@ -177,6 +203,13 @@ public class LedgeClimbAction : GameplayAction, IActionUpdateReciever, IActionPh
                 if (m_ledgeClimbAnimation.TryGetState(m_animator, out var state) && state is ControllerState controllerState)
                     controllerState.SetTrigger("LedgeJump");
             }
+        }
+
+        if (m_input.GetButton(GameInput.VertSkip))
+        {
+            EndAction();
+            m_input.ConsumeInput(GameInput.VertSkip);
+            m_cooldownTime = 0.4f;
         }
     }
     

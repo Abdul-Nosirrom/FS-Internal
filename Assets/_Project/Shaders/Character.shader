@@ -238,10 +238,11 @@ Shader "FreeSkies/Character"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
-                float3 normalWS : TEXCOORD2;
-                float4 tangentWS : TEXCOORD3;
-                float3 viewDirWS : TEXCOORD4;
-                float fogFactor : TEXCOORD5;
+                float3 positionOS : TEXCOORD2;
+                float3 normalWS : TEXCOORD3;
+                float4 tangentWS : TEXCOORD4;
+                float3 viewDirWS : TEXCOORD5;
+                float fogFactor : TEXCOORD6;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -261,6 +262,7 @@ Shader "FreeSkies/Character"
 
                 output.positionCS = v.positionCS;
                 output.positionWS = v.positionWS;
+                output.positionOS = input.positionOS;
                 output.normalWS = v.normalWS;
                 output.viewDirWS = v.viewDirWS;
                 output.tangentWS = v.tangentWS;
@@ -293,6 +295,14 @@ Shader "FreeSkies/Character"
             float3 Frag(Varyings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+                
+                //float y = input.positionOS.y;
+                //float osNoise = worley_3d(input.positionOS, 8, sin(_Time.y) * sin(_Time.y));
+                //return osNoise;
+                //y = 1-saturate((osNoise * 0.25f + y) / 8.f);
+                //float clipT = sin(_Time.y * 0.25f) * sin(_Time.y * 0.25f);
+                //if (y <= 0.95) discard;
+                //return y;
 
                 float4 burn = float4(0,0,0,0);
 #ifdef _ALPHATEST_ON            
@@ -375,7 +385,7 @@ Shader "FreeSkies/Character"
                 float mainLightNoL = 1 - step(0, dot(mainLight.direction, normalWS));
                 fresnelBlackout = (1 - fresnelBlackout);// * mainLightNoL;
                 //return (1 - fresnelBlackout) * mainLightNoL;
-                color *= (1 - fresnelBlackout);
+                //color *= (1 - fresnelBlackout);
                 
                 ApplyHitStunColor(normalWS, viewDirWS, _HITSTUN_FLASH_TIME, color);
 

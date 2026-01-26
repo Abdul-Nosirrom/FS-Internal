@@ -163,7 +163,7 @@ public class PoleSwing : LevelObjectBase
         }
         finally
         {
-            context.PlayerCamera.BlendBackToPlayer(CameraBlendParams.Create(0.45f, Ease.InOutQuad, true));
+            context.PlayerCamera.PopVirtualCamera(m_camera, CameraBlendParams.Create(0.45f, Ease.InOutQuad, true));
             context.cameraController.m_cameraVector.Yaw = context.cameraController.AimYaw(transform.forward * m_swingDirection);
             EndInteraction(context);
             context.physics.VelocityCalculationsEnabled = true;

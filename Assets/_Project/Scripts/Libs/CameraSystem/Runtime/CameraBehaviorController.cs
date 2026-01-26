@@ -211,6 +211,7 @@ namespace FS.CameraSystem
         protected void UpdateLookInput()
         {
             //LookInputDelta = Quaternion.identity;
+            if (m_input.LookVector.sqrMagnitude > 0f) TimeSinceLastInput = 0f;
             
             Vector2 sCurveInput = m_input.IsController
                 ? m_input.LookVector.normalized *
@@ -225,7 +226,6 @@ namespace FS.CameraSystem
             m_prevLookInputRaw = sCurveInput;
             
             Vector2 lookInputRaw = sCurveInput * new Vector2(m_sensitivityX, m_sensitivityY) * Time.deltaTime * 5f;
-            if (lookInputRaw.sqrMagnitude > 0f) TimeSinceLastInput = 0f;
             var targetLookInput = new EulerAngles(-lookInputRaw.y, lookInputRaw.x, 0f);
 
             // TODO: This causes weird feeling shit, only actual issue we're facing with euler angles so far rn is this lerp

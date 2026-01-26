@@ -167,7 +167,7 @@ public class CannonLauncher : LevelObjectBase
         {
             context.actionController.EnableActions();
             context.meshVisibilityController.ShowFullMesh(0.25f);
-            context.PlayerCamera.BlendBackToPlayer(CameraBlendParams.Create(0.45f, Ease.InOutQuad, true));
+            context.PlayerCamera.PopVirtualCamera(m_aimCamera, CameraBlendParams.Create(0.45f, Ease.InOutQuad, true));
             context.physics.VelocityCalculationsEnabled = true;
             context.physics.RotationCalculationsEnabled = true;
             EndInteraction(context);

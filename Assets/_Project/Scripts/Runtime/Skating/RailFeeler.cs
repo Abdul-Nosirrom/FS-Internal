@@ -12,11 +12,13 @@ using ISplineProvider = FS.MeshProcessing.ISplineProvider;
 public class RailFeeler : MonoBehaviour, IDebugProvider
 {
     [SerializeField, Range(0, 1)] private float m_radius = 0.5f;
+    [SerializeField] private float m_zipGrindOffset = 0f;
     [SerializeField, Range(0, 10)] private float m_railSwapDistance = 4;
 
-    private Collider[] m_colliders = new Collider[4];
-    private RaycastHit[] m_railSwapHits = new RaycastHit[4];
+    private Collider[] m_colliders = new Collider[8];
+    private RaycastHit[] m_railSwapHits = new RaycastHit[8];
     private ISplineProvider m_railProvider;
+    private ISplineProvider m_zipGrindProvider;
 
     private ISplineProvider m_leftRailProvider;
     private ISplineProvider m_rightRailProvider;
@@ -24,32 +26,46 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
     private Vector3 m_leftSwapPoint;
     private Vector3 m_rightSwapPoint;
 
+    private PhysicsController m_physics;
     private RailGrindAction m_railGrindAction;
 
     private Vector3 m_railQueryStart => m_railGrindAction is {IsActive: true} ? m_railGrindAction.RailPosition : transform.position;
 
+    private Vector3 m_zipGrindVectorOffset => Application.isPlaying
+        ? m_physics.HeadPositionOffset + m_physics.transform.up * m_zipGrindOffset
+        : transform.position + transform.up * (1.6f + m_zipGrindOffset);
+
     private async void Start()
     {
+        // TODO: We dont need this awaitable anymore i dont think after our gameplayactions as components conversion
         await Awaitable.EndOfFrameAsync(); // just gotta wait because our initialization order w/ the action controller is kinda wack
         var ac = GetComponentInParent<ActionController>();
         m_railGrindAction = ac.GetActionSet<SkatingActionSet>().RailGrind; // no null checks, u must have this if u have a rail feeler lol
+        m_physics = GetComponentInParent<PhysicsController>();
     }
 
     private void FixedUpdate()
     {
         m_railProvider = null;
-        
-        if (Physics.OverlapSphereNonAlloc(m_railQueryStart, m_radius, m_colliders, 1 << PhysicsLayers.RailGrind) > 0)
+        m_zipGrindProvider = null;
+
+        // Check zip-grind rail swap/provider too
+        if (m_railGrindAction is { IsActive: true })
         {
-            foreach (var possibleRail in m_colliders)
+            switch (m_railGrindAction.GrindOrientation)
             {
-                var splineProvider = GetSplineProvider(possibleRail);
-                if (splineProvider != null)
-                {
-                    m_railProvider = splineProvider;
+                case RailGrindAction.OrientationState.Regular:
+                    m_railProvider = m_railGrindAction.RailSpline;
                     break;
-                }
+                case RailGrindAction.OrientationState.Zipline:
+                    m_zipGrindProvider = m_railGrindAction.RailSpline;
+                    break;
             }
+        }
+        else
+        {
+            bool result = TryQueryRailGrind(Vector3.zero, out m_railProvider) || TryQueryRailGrind(
+                m_zipGrindVectorOffset, out m_zipGrindProvider);
         }
 
         m_leftRailProvider = null;
@@ -61,14 +77,43 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
         }
     }
 
+    private bool TryQueryRailGrind(Vector3 offset, out ISplineProvider railSpline)
+    {
+        railSpline = null;
+        
+        if (Physics.OverlapSphereNonAlloc(m_railQueryStart + offset, m_radius, m_colliders,
+                1 << PhysicsLayers.RailGrind) > 0)
+        {
+            foreach (var possibleRail in m_colliders)
+            {
+                var splineProvider = GetSplineProvider(possibleRail);
+                if (splineProvider != null)
+                {
+                    railSpline = splineProvider;
+                    break;
+                }
+            }
+        }
+
+        return railSpline != null;
+    }
+
     private void RailSwapSweep(out ISplineProvider splineProvider, out Vector3 nearestPoint, Vector3 direction)
     {
         splineProvider = null;
         nearestPoint = Vector3.zero;
 
-        Ray castRay = new Ray(m_railQueryStart, direction);
+        // Start the sweep offset and check directions later (counter fix to having a big radius)
+        Ray castRay = new Ray(m_railQueryStart - direction * m_radius, direction);
         
-        int numHits = Physics.SphereCastNonAlloc(castRay, m_radius, m_railSwapHits, m_railSwapDistance, 1 << PhysicsLayers.RailGrind);
+        // Capsule params (we do a capsule sweep of a long capsule 2x player height
+        var cp1 = m_railQueryStart - m_physics.CapsuleHeight * Vector3.up;
+        var cp2 = m_railQueryStart + m_physics.CapsuleHeight * Vector3.up;
+        var cpRad = m_physics.CapsuleRadius;
+        
+        // Capsule cast is better than sphere case here, small radius but tall-ish
+        //int numHits = Physics.SphereCastNonAlloc(castRay, 0.36f, m_railSwapHits, m_railSwapDistance + m_radius, 1 << PhysicsLayers.RailGrind);
+        int numHits = Physics.CapsuleCastNonAlloc(cp1, cp2, cpRad, direction, m_railSwapHits, m_railSwapDistance, 1 << PhysicsLayers.RailGrind);
         if (numHits > 0)
         {
             // Find the nearest rail swap hit that is not the current rail provider
@@ -84,10 +129,13 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
                 // Its the same rail provider or null
                 if (maybeSplineProvider == null || maybeSplineProvider == m_railProvider) continue;
 
-
+                // Could be opposite side given our ray starting point
+                var hitDirection = hit.point - m_railQueryStart;
+                if (hitDirection.Dot(direction) < 0) continue;
+                
                 float distance = Vector3.Distance(hit.point, m_railQueryStart);
                 // If the distance is greater than the nearest found or too close, skip
-                if (distance < 1.5f * m_radius) continue; // Too close to the rail feeler
+                //if (distance < 1.5f * m_radius) continue; // Too close to the rail feeler
                 if (distance >= nearestDistance) continue;
 
                 splineProvider = maybeSplineProvider;
@@ -100,10 +148,14 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
     public bool TryGetRailSpline(out ISplineProvider spline)
     {
         spline = null;
-        if (m_railProvider == null) return false;
-        spline = m_railProvider;
+        if (m_railProvider == null && m_zipGrindProvider == null) return false;
+        spline = m_railProvider ?? m_zipGrindProvider;
         return true;
     }
+
+    public RailGrindAction.OrientationState RailOrientationState => m_zipGrindProvider == null
+        ? RailGrindAction.OrientationState.Regular
+        : RailGrindAction.OrientationState.Zipline;
 
     public bool TryGetRailSwap(Vector3 dir, out ISplineProvider spline, out Vector3 swapPoint)
     {
@@ -171,16 +223,40 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
 
         var color = m_railProvider == null ? noHitColor : hitColor;
         Draw.ingame.SolidBox(m_railQueryStart, m_radius, color);
+        if (m_railProvider != null)
+        {
+            Draw.ingame.Label2D(m_railQueryStart + Vector3.up * 2f, $"Rail: {m_railProvider.GetSpline().transform.parent.parent.name}");
+        }
+        
+        color = m_zipGrindProvider == null ? noHitColor : hitColor;
+        Draw.ingame.SolidBox(m_railQueryStart + m_zipGrindVectorOffset, m_radius, color);
+        if (m_zipGrindProvider != null)
+        {
+            Draw.ingame.Label2D(m_railQueryStart + m_zipGrindVectorOffset + Vector3.up * 2f, $"ZipGrind: {m_zipGrindProvider.GetSpline().transform.parent.parent.name}");
+        }
+
+        var capsuleBottom = m_railQueryStart - transform.up * m_physics.CapsuleHeight;
+        var capsuleTop = m_railQueryStart + transform.up * m_physics.CapsuleHeight;
         
         color = m_rightRailProvider == null ? noHitColor : hitColor;
-        Draw.ingame.SolidBox(m_railQueryStart + transform.right * m_railSwapDistance, m_radius, color);
+        Draw.ingame.WireCapsule(capsuleBottom + transform.right * m_railSwapDistance, capsuleTop + transform.right * m_railSwapDistance, m_physics.CapsuleRadius, color);
+        //Draw.ingame.SolidBox(m_railQueryStart + transform.right * m_railSwapDistance, m_radius, color);
         color = Color.purple;
-        if (m_rightRailProvider != null) Draw.ingame.SolidBox(m_rightSwapPoint, 0.5f, color);
+        if (m_rightRailProvider != null)
+        {
+            Draw.ingame.Label2D(capsuleTop + transform.right * m_railSwapDistance, $"Swap Rail: {m_rightRailProvider.GetSpline().gameObject.transform.parent.parent.name}");
+            Draw.ingame.SolidBox(m_rightSwapPoint, 0.5f, color);
+        }
         
         color = m_leftRailProvider == null ? noHitColor : hitColor;
-        Draw.ingame.SolidBox(m_railQueryStart - transform.right * m_railSwapDistance, m_radius, color);
+        Draw.ingame.WireCapsule(capsuleBottom - transform.right * m_railSwapDistance, capsuleTop - transform.right * m_railSwapDistance, m_physics.CapsuleRadius, color);
+        //Draw.ingame.SolidBox(m_railQueryStart - transform.right * m_railSwapDistance, m_radius, color);
         color = Color.purple;
-        if (m_leftRailProvider != null) Draw.ingame.SolidBox(m_leftSwapPoint, 0.5f, color);
+        if (m_leftRailProvider != null)
+        {
+            Draw.ingame.Label2D(capsuleTop - transform.right * m_railSwapDistance, $"Swap Rail: {m_leftRailProvider.GetSpline().gameObject.transform.parent.parent.name}");
+            Draw.ingame.SolidBox(m_leftSwapPoint, 0.5f, color);
+        }
         
         var leftEndPoint = m_leftRailProvider != null ? m_leftSwapPoint : m_railQueryStart - transform.right * m_railSwapDistance;
         var rightEndPoint = m_rightRailProvider != null ? m_rightSwapPoint : m_railQueryStart + transform.right * m_railSwapDistance;

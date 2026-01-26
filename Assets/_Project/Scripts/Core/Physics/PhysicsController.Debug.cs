@@ -38,19 +38,6 @@ public partial class PhysicsController : IDebugProvider
     private bool debug_hasPausedThisStateChange = false;
 
     private bool debug_motorInfoExpanded = false;
-
-    private DebugGraph debug_speedGraph = new DebugGraph("Speed History", capacity: 512)
-    {
-        AutoScale = true,
-        Symmetric = true,           // Since vertical velocity can be negative
-        ShowGrid = true,
-        ShowLegend = true,
-        ShowMinMax = true,
-        ShowCurrentValue = true,
-        GridLinesHorizontal = 4,
-        GridLinesVertical = 8,
-        BackgroundColor = new Color(0.1f, 0.1f, 0.1f, 0.9f)
-    };
     
     public string DebugName => "PhysicsController";
     public void OnDebugGUI()
@@ -124,48 +111,26 @@ public partial class PhysicsController : IDebugProvider
         GUILayout.Label( $"Air Distance: {debug_airDistance:F1}");
         GUILayout.EndVertical();
         
-        // // Graph option toggles
-        // {
-        //     var ogTextColor = GUI.color;
-        //     GUILayout.BeginHorizontal();
-        //     GUI.color = Color.green;
-        //     debug_graphLateralSpeed = GUILayout.Toggle(debug_graphLateralSpeed, "XZ");
-        //     GUI.color = Color.deepSkyBlue;
-        //     debug_graphVerticalSpeed = GUILayout.Toggle(debug_graphVerticalSpeed, "Y");
-        //     GUI.color = Color.red;
-        //     debug_graphTotalSpeed = GUILayout.Toggle(debug_graphTotalSpeed, "Total");
-        //     GUILayout.EndHorizontal();
-        //     GUI.color = ogTextColor;
-        // }
-        //
-        debug_graphLateralSpeed = DebugGUI.BeginFoldout("Speed Graph", ref debug_graphLateralSpeed);
-        if (debug_graphLateralSpeed)
+        // Graph option toggles
         {
-            var graphRect = GUILayoutUtility.GetAspectRect(1);
-            graphRect.xMax -= 20; // Padding for legend
-            graphRect.yMax -= 20; // Padding for min/max labels
-            // Add series
-            if (debug_speedGraph.GetSeries("Lateral Speed") == null)
-                debug_speedGraph.AddSeries("Lateral Speed", Color.green);
-            if (debug_speedGraph.GetSeries("Vertical Speed") == null)
-                debug_speedGraph.AddSeries("Vertical Speed", Color.deepSkyBlue);
-            if (debug_speedGraph.GetSeries("Total Speed") == null)
-                debug_speedGraph.AddSeries("Total Speed", Color.red);
-
-            if (debug_graphLateralSpeed && Event.current.type == EventType.Repaint)
-            {
-                debug_speedGraph.GetSeries(0).Push(LateralSpeed);
-                debug_speedGraph.GetSeries(1).Push(VerticalSpeed);
-                debug_speedGraph.GetSeries(2).Push(Speed);
-            }
-            
-            debug_speedGraph.Draw(graphRect);
-            
-            DebugGUI.EndFoldout();
+            var ogTextColor = GUI.color;
+            GUILayout.BeginHorizontal();
+            GUI.color = Color.green;
+            debug_graphLateralSpeed = GUILayout.Toggle(debug_graphLateralSpeed, "XZ");
+            GUI.color = Color.deepSkyBlue;
+            debug_graphVerticalSpeed = GUILayout.Toggle(debug_graphVerticalSpeed, "Y");
+            GUI.color = Color.red;
+            debug_graphTotalSpeed = GUILayout.Toggle(debug_graphTotalSpeed, "Total");
+            GUILayout.EndHorizontal();
+            GUI.color = ogTextColor;
         }
-        //if (debug_graphLateralSpeed) DebugGUI.Plot(debug_lateralSpeedHistory.ToArray(), graphRect, maxY:25);
-        //if (debug_graphVerticalSpeed) DebugGUI.Plot(debug_verticalSpeedHistory.ToArray(), graphRect, maxY:25, color:Color.deepSkyBlue);
-        //if (debug_graphTotalSpeed) DebugGUI.Plot(debug_totalSpeedHistory.ToArray(), graphRect, maxY:25, color:Color.red);
+
+        var graphRect = Rect.zero;
+        if (debug_graphLateralSpeed || debug_graphVerticalSpeed || debug_graphTotalSpeed) 
+            graphRect = GUILayoutUtility.GetAspectRect(1);
+        if (debug_graphLateralSpeed) DebugGUI.Plot(debug_lateralSpeedHistory.ToArray(), graphRect, maxY:25);
+        if (debug_graphVerticalSpeed) DebugGUI.Plot(debug_verticalSpeedHistory.ToArray(), graphRect, maxY:25, color:Color.deepSkyBlue);
+        if (debug_graphTotalSpeed) DebugGUI.Plot(debug_totalSpeedHistory.ToArray(), graphRect, maxY:25, color:Color.red);
 
         GUI.backgroundColor = Color.gray6;
         if (DebugGUI.BeginFoldout("Physics Modifiers", ref debug_modifiersExpanded))

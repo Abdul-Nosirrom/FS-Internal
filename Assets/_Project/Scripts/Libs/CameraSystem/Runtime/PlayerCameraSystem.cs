@@ -72,6 +72,8 @@ namespace FS.CameraSystem
         public CameraBlendParams CameraSwitchBlendParams { get; private set; }
         public TimeSince CameraSwitchBlendProgress { get; private set; }
 
+        private List<VirtualCamera> m_virtualCameraHistory = new();
+
         /// <summary>
         /// Event invoked right when we start blending back to the player camera. Useful for resetting the player camera
         /// rotation for example to ensure that when we blend back, it's facing forward (not facing where it last faced)
@@ -98,9 +100,37 @@ namespace FS.CameraSystem
             m_blendFromCamera = new CameraState(m_cameraState);
             m_blendToCamera = virtualCamera.m_cameraState;
             
+            if (VirtualCameraBlendTarget != null) VirtualCameraBlendTarget.DeactivateCamera();
+            
             VirtualCameraBlendTarget = virtualCamera;
             CameraSwitchBlendParams = blendParams.Value;
             CameraSwitchBlendProgress = 0f;
+            
+            // Add it to the history at the top (remove first if already present to re-prioritize)
+            m_virtualCameraHistory.Remove(virtualCamera);
+            m_virtualCameraHistory.Add(virtualCamera);
+
+            // Invoke TODO: Improve this assignment
+            VirtualCameraBlendTarget.ActivateCamera(m_playerData.Instance.GetComponentInChildren<PhysicsController>().gameObject);
+        }
+
+        /// <summary>
+        /// Blends out of the specified virtual camera if its active or just removes it from the history.
+        /// Will attempt to blend to the last added virtual camera or back to the player
+        /// </summary>
+        public void PopVirtualCamera(VirtualCamera virtualCamera, CameraBlendParams? blendParams = null)
+        {
+            // Is it in the history?
+            if (!m_virtualCameraHistory.Contains(virtualCamera)) return; // Can't do much here
+            
+            // Is it the active virtual camera? If not we don't gotta worry about blending out just remove it from the list
+            m_virtualCameraHistory.Remove(virtualCamera);
+            if (VirtualCameraBlendTarget != virtualCamera) return;
+            
+            // Get the next virtual camera we'll be blending towards
+            var nextVCam = m_virtualCameraHistory.Count > 0 ? m_virtualCameraHistory[^1] : null;
+            if (nextVCam == null) BlendBackToPlayer(blendParams);
+            else BlendToCamera(nextVCam, blendParams); // Deactivate is invoked here
         }
 
         public void BlendBackToPlayer(CameraBlendParams? blendParams = null)
@@ -116,6 +146,9 @@ namespace FS.CameraSystem
             VirtualCameraBlendTarget = null;
             CameraSwitchBlendParams = blendParams.Value;
             CameraSwitchBlendProgress = 0f;
+            
+            // Clear history, we assume this function is used in the context of fully resetting the camera back to the player now
+            m_virtualCameraHistory.Clear();
             
             OnBeginBlendToPlayerCamera?.Invoke();
         }

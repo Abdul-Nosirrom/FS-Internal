@@ -75,6 +75,9 @@ namespace FS.Animation
         
         public static bool TryGetState(this IAnimation animation, FSAnimator animator, out AnimancerState state)
         {
+            // GetTransition() isn't implemented on AnimationReference
+            if (animation is AnimationReference animRef) return animRef.TryGetState(animator, out state);
+            
             state = null;
             
             var transition = animation.GetTransition();

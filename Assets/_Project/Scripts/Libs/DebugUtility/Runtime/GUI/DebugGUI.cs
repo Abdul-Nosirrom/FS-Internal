@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FS.RuntimeDebug
 {
-    public static partial class DebugGUI
+    public static class DebugGUI
     {
         public static bool BeginFoldout(string label, ref bool isExpanded, GUIStyle style = null)
         {

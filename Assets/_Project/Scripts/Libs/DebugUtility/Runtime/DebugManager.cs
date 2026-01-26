@@ -14,7 +14,7 @@ using UnityEngine.Assertions;
 namespace FS.RuntimeDebug
 {
     [DefaultExecutionOrder(100)] // Make it run after the camera system so that the free cam overrides it
-    public class DebugManager : PersistentSingleton<DebugManager>, IDrawGizmos
+    public class DebugManager : PersistentSingleton<DebugManager>//, IDrawGizmos
     {
         private class DebugProviderState : IEquatable<IDebugProvider>
         {
@@ -229,7 +229,7 @@ namespace FS.RuntimeDebug
         {
             base.Awake();
 
-            DrawingManager.Register(this);
+            //DrawingManager.Register(this);
 
             var fpsCounter = Resources.Load<GameObject>("[DEBUG] Performance Analysis");
             if (fpsCounter != null)
@@ -338,9 +338,9 @@ namespace FS.RuntimeDebug
                 }
             }
             
-#if !UNITY_EDITOR
+//#if !UNITY_EDITOR
             DrawGizmos(); // Otherwise handles by DrawManager for ALINE in editor
-#endif
+//#endif
         }
         
         public void DrawGizmos()

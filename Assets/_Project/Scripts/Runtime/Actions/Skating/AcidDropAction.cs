@@ -80,7 +80,7 @@ public class AcidDropAction : GameplayAction, IActionPhysicsReciever, IActionGiz
             // TODO: Ideally our vertical offset would be at the peak of our trajectory
             Vector3 castPos = m_physics.FootPosition + velDirection * m_maxAcidDropDistance * t - m_physics.GravityDir * 5f; // Slight vertical offset
             Vector3 dir = m_physics.GravityDir;
-            float maxCastDist = 40;
+            float maxCastDist = 150;
 
             Physics.queriesHitTriggers = true; // NOTE: Allow hitting triggers for level object queries
             bool acidDropQuery = Physics.SphereCast(castPos, 0.25f, dir, out var hit, maxCastDist, 1 << PhysicsLayers.Vert);
