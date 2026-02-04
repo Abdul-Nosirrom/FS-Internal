@@ -22,7 +22,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     private const float k_reboundSpeed = 20f;
     private const float k_rotationLerpSpeed = 15f;
     private const float k_orientationTransitionDuration = 0.2f;
-    private const float k_swapParabolicHeight = 0.5f;
+    private const float k_swapParabolicHeight = 2f;
     private const float k_zipGrindAngleThreshold = 30f;
     private const float k_actionCooldown = 0.4f;
     
@@ -31,9 +31,11 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     #region Animation Properties
 
     public static readonly int k_animLeanAmount = Animator.StringToHash("LeanAmount");
+    public static readonly int k_animRailSpeed = Animator.StringToHash("Speed");
     public static readonly int k_animRailSwapTrigger = Animator.StringToHash("RailSwap");
     public static readonly int k_animReboundTrigger = Animator.StringToHash("Rebound");
     public static readonly int k_animOrientationState = Animator.StringToHash("OrientationState");
+    public static readonly int k_animRailSwapDirection = Animator.StringToHash("RailSwapDirection");
     
     #endregion
 
@@ -53,6 +55,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     {
         Default,
         Swap,
+        Trick,
         Rebound
     }
 
@@ -80,7 +83,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     protected RailFeeler m_feeler;
     private SplineFollower m_grindFollower = new SplineFollower();
     private IAnimation m_railAnimation;
-    private IAnimation m_railSwapAnimation;
+    private IAnimation m_railTrickAnimation = AnimationReference.Get<ActionsAnimationSet>("RailTrick");
+    //private IAnimation m_railSwapAnimation;
     
     #endregion
 
@@ -94,7 +98,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         set => m_grindFollower.m_spline = value;
     }
 
-    public ControllerState AnimRailState { get; private set; }
+    public ControllerState AnimRailState => (ControllerState)m_railAnimation?.GetState(m_animator, false);//{ get; private set; }
     
     /// <summary>
     /// Current grinding speed along the rail spline.
@@ -128,8 +132,9 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         get => m_state;
         set
         {
+            var prevState = m_state;
             m_state = value;
-            OnStateChanged();
+            OnStateChanged(prevState);
         }
     }
 
@@ -165,8 +170,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (m_animator == null) return;
         
         // TODO: Uncomment when animation set is available
-        // m_railAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailGrindBase;
-        // m_railSwapAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailSwap;
+        m_railAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailGrind;
+        //m_railSwapAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailSwap;
     }
 
     #endregion
@@ -193,7 +198,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     public override void OnStart()
     {
-        AnimRailState = m_railAnimation?.Play(m_animator) as ControllerState;
+        //AnimRailState = m_railAnimation?.Play(m_animator) as ControllerState;
+        m_railAnimation?.Play(m_animator);
         m_grindFollower.Init(m_grindFollower.m_spline, m_physics);
 
         // Reset state
@@ -215,7 +221,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private void FadeOutAnimation()
     {
-        m_railAnimation?.GetState(m_animator).Layer.StartFade(0);
+        m_railAnimation?.Stop(m_animator, AnimancerGraph.DefaultFadeDuration);
     }
 
     #endregion
@@ -228,11 +234,12 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (State == GrindState.Rebound) return;
 
         UpdateLeanAmount();
+        TryRailTrick();
         TryRailSwap();
         TryChangeZipOrientation();
         UpdatePosition();
     }
-    
+
     /// <summary>
     /// Handles wall collision detection and rebound initiation.
     /// </summary>
@@ -249,7 +256,6 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (State == GrindState.Default)
         {
             State = GrindState.Rebound;
-            StartCoroutine(PerformRebound());
             return true;
         }
         else
@@ -270,6 +276,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         var currentLeanAmount = AnimRailState?.GetFloat(k_animLeanAmount);
         leanInput = Mathf.Lerp(currentLeanAmount ?? 0, leanInput, 5f * Time.deltaTime);
         AnimRailState?.SetFloat(k_animLeanAmount, leanInput); // Can smooth it
+
+        AnimRailState?.SetFloat(k_animRailSpeed, Mathf.InverseLerp(k_minGrindSpeed, k_maxGrindSpeed, m_grindFollower.m_speed));
     }
 
     #endregion
@@ -280,6 +288,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     {
         Vector3 fromPos = m_physics.FootPosition;
         Vector3 offsetVector = CalculateTotalOffset();
+        //Vector3 constantOffset = -m_grindFollower.Normal * 0.1f;
         Vector3 targetPoint = m_grindFollower.Position + offsetVector + m_zipGrindAnimationOffset;
 
         // Calculate alignment interpolation (skip during swap to avoid interference)
@@ -348,9 +357,9 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private float GetSwapProgress()
     {
-        // Prefer animation-driven timing if available
-        return m_railSwapAnimation?.GetState(m_animator)?.NormalizedTime 
-               ?? m_sinceSwapStarted / m_swapTime;
+        return m_sinceSwapStarted / 0.5f;
+        //return m_railSwapAnimation?.GetState(m_animator)?.NormalizedTime 
+        //       ?? m_sinceSwapStarted / m_swapTime;
     }
 
     #endregion
@@ -363,6 +372,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (m_input == null || !m_input.GetButton(GameInput.Jump)) return;
 
         Vector3 swapDirection = m_physics.MoveInput();
+        AnimRailState?.SetFloat(k_animRailSwapDirection, Mathf.Sign(swapDirection.Dot(m_physics.transform.right)));
 
         if (m_feeler.TryGetRailSwap(swapDirection, out var swapSpline, out var swapPoint))
         {
@@ -384,6 +394,32 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         m_input.ConsumeInput(GameInput.Jump);
     }
 
+    #endregion
+    
+    #region Rail Trick
+    
+    /// <summary>
+    /// Simple one shot rail trick with slight boost
+    /// </summary>
+    private void TryRailTrick()
+    {
+        if (GrindOrientation != OrientationState.Regular) return;
+        if (State != GrindState.Default) return;
+        
+        if (m_input.GetButton(GameInput.LightAttack))
+        {
+            m_input.ConsumeInput(GameInput.LightAttack);
+            StartActionCoroutine(PerformSimpleRailTrick());
+        }
+    }
+
+    private IEnumerator PerformSimpleRailTrick()
+    {
+        m_railTrickAnimation.Play(m_animator);
+        yield return m_railTrickAnimation.WaitForFadeOut(m_animator);
+        if (State == GrindState.Trick) State = GrindState.Default;
+    }
+    
     #endregion
 
     #region Zipline Orientation
@@ -443,8 +479,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private IEnumerator PerformRebound()
     {
-        // Play wall eject animation
-        AnimRailState?.SetTrigger(k_animReboundTrigger);
+        //AnimRailState?.SetTrigger(k_animReboundTrigger);
         //yield return AnimRailState?.WaitForFlag(); or await
         // AnimRailState?.OnFlagInvoked(RAILGRIND_REBOUND, () =>
         // {
@@ -452,24 +487,20 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         //     m_grindFollower.m_speed = k_reboundSpeed * -originalDirectionSign;
         //     State = GrindState.Default;
         // });
-        var wallEjectAnim = m_animator.GetAnimationSet<ActionsAnimationSet>().SpringKickWallEject;
-        var animState = wallEjectAnim.Play(m_animator, FSAnimationLayer.Action);
-        animState.Time = 0.2f;
-        animState.Weight = 1f;
 
         // Rotate 180 degrees to face away from wall
         m_physics.Rotation = Quaternion.AngleAxis(180f, m_physics.transform.up) * m_physics.Rotation;
+        m_physics.SnapVisualRotation();
+        
+        // Align position to wall
+        var contactPoint = m_physics.WallContactCollision.point;
+        var contactNormal = m_grindFollower.Direction;
+        var distToContact = -(contactPoint - m_physics.Position).Dot(contactNormal);
+        m_physics.Position += contactNormal * (distToContact + m_physics.CapsuleRadius * 1.1f);
 
         // Pause movement during wind-up
         var originalDirectionSign = m_grindFollower.DirectionSign;
-        while (animState.Time < 0.55f)
-        {
-            if (!IsActive) yield break;
-            
-            m_grindFollower.m_speed = 0f;
-            wallEjectAnim.Play(m_animator, FSAnimationLayer.Action);
-            yield return Yields.WaitForFixedUpdate;
-        }
+        yield return Yields.WaitForSeconds(0.5f);
 
         // Launch in reverse direction
         m_grindFollower.m_speed = k_reboundSpeed * -originalDirectionSign;
@@ -516,35 +547,32 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     #region State Management
 
-    private void OnStateChanged()
+    private void OnStateChanged(GrindState prevState)
     {
+        // Since trick anim is played through a seperate mechanism, ensure we stop it
+        if (prevState == GrindState.Trick && State != GrindState.Trick)
+        {
+            //m_railTrickAnimation.Stop(m_animator); maybe not needed
+        }
+        
         // TODO: State management & animation playbacks gonna change heavily once we've got anims in. Prolly Mecanim state machine responding to this ezpz since 
         // so we'd just worry about state management here, and then set the current state on the ControllerState of the anim.
         switch (m_state)
         {
             case GrindState.Default:
-                m_railAnimation?.Play(m_animator);
+                //if (!AnimRailState.IsPlaying) m_railAnimation?.Play(m_animator);
                 break;
-
+            case GrindState.Rebound:
+                // Play wall eject animation
+                AnimRailState?.CrossFade("Rebound", 0, 0, 0.2f);
+                StartCoroutine(PerformRebound());
+                break;
             case GrindState.Swap:
                 m_sinceSwapStarted = 0f;
-                PlaySwapAnimation();
+                AnimRailState?.CrossFade("Rail Swap", 0, 0, 0);
                 break;
         }
     }
-
-    private void PlaySwapAnimation()
-    {
-        // Timing issues as opposed to directly playing it? Cuz we wanna reset the state-time to 0 everytime it plays
-        AnimRailState?.CrossFade("RailSwap");
-        AnimRailState?.SetTrigger(k_animRailSwapTrigger);
-        m_railSwapAnimation?.Play(m_animator);
-        
-        if (m_railSwapAnimation?.TryGetState(m_animator, out var state) == true)
-        {
-            state.NormalizedTime = 0f;
-        }
-    }
-
+    
     #endregion
 }

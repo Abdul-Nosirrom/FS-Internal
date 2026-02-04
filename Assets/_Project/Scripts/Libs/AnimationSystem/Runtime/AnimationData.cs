@@ -4,6 +4,7 @@
     {
         Locomotion = 0, 
         Action = 1,
-        Additive = 2
+        RailGrind = 2,
+        Additive = 3
     }
 }

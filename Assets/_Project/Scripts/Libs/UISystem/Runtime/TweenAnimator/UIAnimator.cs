@@ -17,10 +17,14 @@ namespace FS.UI
             await Awaitable.NextFrameAsync(); // Calls PrimeTweenManager.Instance and creates a GO, shouldn't be done first frame (monobehavior constructor)
             PrimeTween.PrimeTweenConfig.warnEndValueEqualsCurrent = false;
         }
-#endif        
+#endif
         [RuntimeInitializeOnLoadMethod]
-        private static void RuntimeTweenConfig() => PrimeTween.PrimeTweenConfig.warnEndValueEqualsCurrent = false;
-        
+        private static void RuntimeTweenConfig()
+        {
+            PrimeTween.PrimeTweenConfig.warnEndValueEqualsCurrent = false;
+            PrimeTween.PrimeTweenConfig.warnZeroDuration = false;
+        }
+
         public async Awaitable PlayForwardAsync()
         {
             Play();

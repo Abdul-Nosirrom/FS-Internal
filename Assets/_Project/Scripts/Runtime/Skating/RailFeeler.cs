@@ -35,10 +35,8 @@ public class RailFeeler : MonoBehaviour, IDebugProvider
         ? m_physics.HeadPositionOffset + m_physics.transform.up * m_zipGrindOffset
         : transform.position + transform.up * (1.6f + m_zipGrindOffset);
 
-    private async void Start()
+    private void Awake()
     {
-        // TODO: We dont need this awaitable anymore i dont think after our gameplayactions as components conversion
-        await Awaitable.EndOfFrameAsync(); // just gotta wait because our initialization order w/ the action controller is kinda wack
         var ac = GetComponentInParent<ActionController>();
         m_railGrindAction = ac.GetActionSet<SkatingActionSet>().RailGrind; // no null checks, u must have this if u have a rail feeler lol
         m_physics = GetComponentInParent<PhysicsController>();

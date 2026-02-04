@@ -118,12 +118,40 @@ namespace FS.Animation
                 if (layer.TargetWeight == 0f) continue;
         
                 // Check if non-looping animation has finished
-                if (!layer.CurrentState.IsLooping && 
+                if (layer.CurrentState is ControllerState cState && ShouldFadeOutControllerState(cState))
+                {
+                    // TODO: For mecanim states idk what to do, values reflect the current animState in it so unreliable
+                    FadeLayer((FSAnimationLayer)layerIdx, 0f);
+                }
+                else if (!layer.CurrentState.IsLooping && 
                     layer.CurrentState.NormalizedTime >= layer.CurrentState.NormalizedEndTime)
                 {
+                    //Debug.LogError($"Fading Out Layer: {(FSAnimationLayer)layerIdx}");
                     FadeLayer((FSAnimationLayer)layerIdx, 0f);
                 }
             }
+        }
+        
+        private bool ShouldFadeOutControllerState(ControllerState cState)
+        {
+            // BUG: Issue is when we've got A -> B -> C and timing of A -> B overlaps with specified exit time of B -> C causing an incorrect layer fade out
+            var playable = cState.Playable;
+            const int controllerLayer = 0; // Base layer of the AnimatorController
+    
+            // If transitioning, something is coming next - don't fade
+            if (playable.IsInTransition(controllerLayer))
+                return false;
+            
+            var stateInfo = playable.GetCurrentAnimatorStateInfo(controllerLayer);
+            
+            // Looping states are never "over"
+            if (stateInfo.loop)
+                return false;
+    
+            // Any transitions queued up that are possible?
+            
+            // State is finished and no transition queued
+            return stateInfo.normalizedTime >= 1f;
         }
         
         public T GetAnimationSet<T>() where T : AnimationSet => GetAnimationSet(typeof(T)) as T;

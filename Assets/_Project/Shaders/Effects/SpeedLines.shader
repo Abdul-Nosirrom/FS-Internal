@@ -1,4 +1,4 @@
-﻿Shader "FreeSkies/Effects/SpeedLinesMesh"
+﻿Shader "FreeSkies/Effects/SpeedLines"
 {
     SubShader
     {
@@ -74,11 +74,36 @@
                                  dot(hash33(s + i2), x2),  
                                  dot(hash33(s + 1.0), x3)) * w * w, 52);
             }
+            
+            #include "../Library/Noise/Noise2D.hlsl"
 
             float4 frag(v2f i) : SV_Target
             {
                 float2 screenUV = i.screenPos.xy / 8;
                 screenUV = screenUV + _Time.y * 0.5f; // Slightly animate noise over time
+                
+                float2 lineUVs = i.uv;
+                // Stretch it along 1 axist
+                lineUVs.y = frac(lineUVs.y + 5*_Time.y);
+                
+                // Quadratic gradient mask
+                float mask = (i.uv.y - 0.5) * 2;
+                mask *= mask;
+                mask = 1-mask;
+                
+                // Speed opacity
+                float speedMask = smoothstep(16, 22, _PlayerSpeed);
+                
+                // Width modulo
+                float widthMod = 0 * smoothstep(0.7, 1, i.uv.y);
+                
+                // Sample noise
+                float rawNoise = fbm_perlin_2d_01(lineUVs, float2(64, 1));
+                float steppedNoise = step(0.65 + widthMod, rawNoise);
+                float4 result = steppedNoise * float4(1,1,1,1);
+                result.a *= mask * 0.125f * speedMask;
+                return result;
+                return float4(i.uv, 0, 1);
 
                // i.uv.x += length(noiseSample) * 0.005f;
                 float p = 0.5 + i.uv.x;// * min(length(i.uv), 0.05);

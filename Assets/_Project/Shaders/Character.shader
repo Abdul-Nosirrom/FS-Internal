@@ -83,12 +83,17 @@ Shader "FreeSkies/Character"
         [ShowIf(_ALPHATEST_ON)] _BurnSmoothness("Burn Smoothness", Range(0,1)) = 0
         
         //////////////////////////
-        // DISSOLVE / ALPHA
+        // OUTLINES
         /////////////////////////
         [SectionHeader(Outlines)]
         [Toggle(_ENABLE_OUTLINES)] _EnableOutlines("Enable Outlines", Float) = 0
         [ShowIf(_ENABLE_OUTLINES)] _OutlineWidth("Outline Width", Range(0,1)) = 0.1
-        [ShowIf(_ENABLE_OUTLINES)] _OutlineColor("Outline Color", Color) = (0,0,0,1) 
+        [ShowIf(_ENABLE_OUTLINES)] _OutlineColor("Outline Color", Color) = (0,0,0,1)
+        
+        //////////////////////////
+        // MISC
+        /////////////////////////
+        [HideInInspector] _HitStunFlashTime("Hit Stun Flash Time", Float) = 0
     }
 
     SubShader
@@ -158,7 +163,20 @@ Shader "FreeSkies/Character"
 
         #include "Library/Core/Common.hlsl"
         #include "Library/Effects.hlsl"
-
+        
+        #define EXTRA_ATTRIBUTES float4 color : COLOR;
+        #define EXTRA_INTERPOLATORS \
+            float4 color : COLOR;\
+            float3 positionWS : TEXCOORD4;\
+            float3 positionOS : TEXCOORD5;\
+            float3 viewDirWS : TEXCOORD6;
+        
+        #define TRANSFER_EXTRA(output, input)\
+            output.color = input.color;\
+            output.positionOS = input.positionOS.xyz;\
+            output.positionWS = TransformObjectToWorld(input.positionOS.xyz);\
+            output.viewDirWS = GetWorldSpaceNormalizeViewDir(output.positionWS);
+        
         // Computes the dissolve
         float4 AlphaDissolveBurn(float2 uv)
         {
@@ -177,7 +195,11 @@ Shader "FreeSkies/Character"
             return float4(_BurnColor.rgb * lerp(0.3, 1, alphaTex.r), _BurnColor.a * burnMask);
         }
 
-        #define ALPHA_CLIP_FUNCTION(uv) AlphaDissolveBurn(GetNormalizedScreenSpaceUV(input.positionCS))
+        #pragma shader_feature_local_fragment _ALPHATEST_ON
+
+        #ifdef _ALPHATEST_ON
+            #define ALPHA_CLIP(input) AlphaDissolveBurn(GetNormalizedScreenSpaceUV(input.positionCS))
+        #endif
 
         ENDHLSL
 
@@ -204,56 +226,24 @@ Shader "FreeSkies/Character"
             #pragma shader_feature_local_fragment _LIGHT_RAMP
             #pragma shader_feature_local_fragment _RIM
             #pragma shader_feature_local_fragment _RIM_NOISEMASK
-            #pragma shader_feature_local_fragment _ALPHATEST_ON
 
-            // URP keywords
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
-            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
-            #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
-            #pragma multi_compile _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
-            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-
-            // Unity keywords
-            #pragma multi_compile _ LIGHTMAP_ON
-            #pragma multi_compile_fragment _ DEBUG_DISPLAY
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_fog
-            #pragma multi_compile_instancing
-
+            #include_with_pragmas "Library/Keywords/ForwardKeywords.hlsl"
             #include "Library/Core/Lighting/LightLoop.hlsl"
             #include "Library/Core/DebugSupport.hlsl"
-
-            struct Attributes
+            
+            #define NEEDS_NORMAL
+            #define NEEDS_TANGENT
+            
+            #define PASS_ATTRIBUTES float2 lightmapUV : TEXCOORD1;
+            #define PASS_INTERPOLATORS\
+                half fogFactor : FOG_FACTOR;\
+                DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, VERTEX_SH);
+            
+            #include "Library/Core/StructBuilder.hlsl"
+            
+            Interpolators Vert(Attributes input)
             {
-                float4 positionOS : POSITION;
-                float3 normalOS : NORMAL;
-                float4 tangentOS : TANGENT;
-                float2 uv : TEXCOORD0;
-                float2 lightmapUV : TEXCOORD1;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
-                float3 positionWS : TEXCOORD1;
-                float3 positionOS : TEXCOORD2;
-                float3 normalWS : TEXCOORD3;
-                float4 tangentWS : TEXCOORD4;
-                float3 viewDirWS : TEXCOORD5;
-                float fogFactor : TEXCOORD6;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-#if defined(_OUTLINES_PASS) && !defined(_ENABLE_OUTLINES)
-            Varyings Vert(Attributes input) { return (Varyings)0; }
-            float3 Frag(Varyings input) : SV_TARGET { discard; return 0; }
-#else            
-
-            Varyings Vert(Attributes input)
-            {
-                Varyings output = (Varyings)0;
+                Interpolators output = INIT_INTERPOLATORS;
 
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
@@ -266,10 +256,12 @@ Shader "FreeSkies/Character"
                 output.normalWS = v.normalWS;
                 output.viewDirWS = v.viewDirWS;
                 output.tangentWS = v.tangentWS;
-
+            
                 output.uv = input.uv;
                 output.fogFactor = ComputeFogFactor(v.positionCS.z);
-
+                
+                OUTPUT_SH(v.normalWS, output.vertexSH);
+                OUTPUT_LIGHTMAP_UV(input.lightmapUV, unity_LightmapST, output.lightmapUV);
                 return output;
             }
 
@@ -292,7 +284,7 @@ Shader "FreeSkies/Character"
             }
 
             #include "Library/Noise/Noise3D.hlsl"
-            float3 Frag(Varyings input) : SV_Target
+            float3 Frag(Interpolators input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
                 
@@ -328,15 +320,8 @@ Shader "FreeSkies/Character"
                 float3 normalWS = normalize(input.normalWS);
                 float3 viewDirWS = normalize(input.viewDirWS);
                 
-#if defined(DEBUG_DISPLAY)
-                // Debug support
-                InputData inputData = (InputData)0;
-                SetupDebugData(inputData, input.positionCS, shadowCoords, normalWS, viewDirWS);
-
-                float4 debugColor;
-                if (TryGetDebugColor(inputData, albedo, alpha, float3(0,0,0), debugColor))
-                    return debugColor;
-#endif
+                if (CanDebugOverrideOutputColor(albedo.rgb, input.positionCS, input.positionWS, normalWS, SAMPLE_GI(input.lightmapUV, input.vertexSH, normalWS)))
+                    return albedo.rgb;
 
                 // Lighting
                 Light mainLight = GetMainLightData(input.positionWS, shadowCoords);
@@ -347,7 +332,7 @@ Shader "FreeSkies/Character"
                 // Additional lights
                 _ShadowSmoothness = max(0.1f, _ShadowSmoothness); // For additional lights some gradient is ok if not a bit better actually
                 LIGHT_LOOP_BEGIN(input.positionWS, input.positionCS)
-                    Light light = LIGHT_LOOP_GET_LIGHT(input.positionWS);
+                    Light light = LIGHT_LOOP_GET_LIGHT_SHADOW(input.positionWS, 1);
                     ComputeLighting(light, normalWS, viewDirWS, lighting, lightMask);
                 LIGHT_LOOP_END
 
@@ -392,9 +377,8 @@ Shader "FreeSkies/Character"
                 // Fog
                 color = MixFog(color, input.fogFactor);
                 
-                return color;;
+                return color;
             }
-#endif            
             ENDHLSL
         }
         // =====================================================================
@@ -409,15 +393,7 @@ Shader "FreeSkies/Character"
             Cull Front
             
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex OutlinesVertex
-            #pragma fragment OutlinesFragment
-
-            #pragma shader_feature_local _ENABLE_OUTLINES
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            
-            #include "Library/Core/Passes/InverseHullOutlines.hlsl"
+            #include_with_pragmas "Library/Core/Passes/InverseHullOutlines.hlsl"
             ENDHLSL
         }
         // =====================================================================
@@ -426,10 +402,7 @@ Shader "FreeSkies/Character"
         Pass
         {
             Name "ShadowCaster"
-            Tags
-            {
-                "LightMode" = "ShadowCaster"
-            }
+            Tags { "LightMode" = "ShadowCaster" }
 
             ZWrite On
             ZTest LEqual
@@ -437,16 +410,7 @@ Shader "FreeSkies/Character"
             Cull Back
 
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex ShadowPassVertex
-            #pragma fragment ShadowPassFragment
-
-            #pragma shader_feature_local _ALPHATEST_ON
-            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            
-            #include "Library/Core/Passes/ShadowCaster.hlsl"
+            #include_with_pragmas "Library/Core/Passes/ShadowCaster.hlsl"
             ENDHLSL
         }
 
@@ -456,25 +420,14 @@ Shader "FreeSkies/Character"
         Pass
         {
             Name "DepthOnly"
-            Tags
-            {
-                "LightMode" = "DepthOnly"
-            }
+            Tags { "LightMode" = "DepthOnly" }
 
             ZWrite On
             ColorMask R
             Cull Back
 
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex DepthOnlyVertex
-            #pragma fragment DepthOnlyFragment
-
-            #pragma shader_feature_local _ALPHATEST_ON
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            
-            #include "Library/Core/Passes/DepthOnly.hlsl"
+            #include_with_pragmas "Library/Core/Passes/DepthOnly.hlsl"
             ENDHLSL
         }
 
@@ -484,28 +437,13 @@ Shader "FreeSkies/Character"
         Pass
         {
             Name "DepthNormals"
-            Tags
-            {
-                "LightMode" = "DepthNormals"
-            }
+            Tags { "LightMode" = "DepthNormals" }
 
             ZWrite On
             Cull Back
 
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex DepthNormalsVertex
-            #pragma fragment DepthNormalsFragment
-
-            //#pragma shader_feature_local _NORMALMAP
-            #pragma shader_feature_local _ALPHATEST_ON
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_fragment _ _WRITE_RENDERING_LAYERS
-            #pragma multi_compile_instancing
-
-            #define DEPTH_NORMALS_CLIP(uv) AlphaDissolve(uv)
-
-            #include "Library/Core/Passes/DepthNormals.hlsl"
+            #include_with_pragmas "Library/Core/Passes/DepthNormals.hlsl"
             ENDHLSL
         }
 
@@ -515,25 +453,13 @@ Shader "FreeSkies/Character"
         Pass
         {
             Name "MotionVectors"
-            Tags
-            {
-                "LightMode" = "MotionVectors"
-            }
+            Tags { "LightMode" = "MotionVectors" }
 
             ColorMask RG
             Cull Back
 
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex MotionVectorsVertex
-            #pragma fragment MotionVectorsFragment
-
-            #pragma shader_feature_local _ALPHATEST_ON
-            #pragma shader_feature_local_vertex _ADD_PRECOMPUTED_VELOCITY
-            #pragma multi_compile _ LOD_FADE_CROSSFADE
-            #pragma multi_compile_instancing
-            
-            #include "Library/Core/Passes/MotionVectors.hlsl"
+            #include_with_pragmas "Library/Core/Passes/MotionVectors.hlsl"
             ENDHLSL
         }
 
@@ -543,22 +469,12 @@ Shader "FreeSkies/Character"
         Pass
         {
             Name "Meta"
-            Tags
-            {
-                "LightMode" = "Meta"
-            }
+            Tags { "LightMode" = "Meta" }
 
             Cull Off
 
             HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex MetaPassVertex
-            #pragma fragment MetaPassFragment
-
-            //#pragma shader_feature_local_fragment _EMISSION
-            #pragma shader_feature EDITOR_VISUALIZATION
-
-            #include "Library/Core/Passes/Meta.hlsl"
+            #include_with_pragmas "Library/Core/Passes/Meta.hlsl"
             ENDHLSL
         }
     }

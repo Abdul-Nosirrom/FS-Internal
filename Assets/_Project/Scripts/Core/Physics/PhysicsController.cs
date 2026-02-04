@@ -44,6 +44,18 @@ public partial class PhysicsController : MonoBehaviour
         get => m_motor.IsKinematic;
         set => m_motor.IsKinematic = value;
     }
+
+    public bool HadJustExitedVertSurface
+    {
+        get
+        {
+            if (IsGrounded) return false;
+            if (m_timeSinceLostGround > 0.5f) return false;
+            bool layerCheck = LastGround.CompareLayer(PhysicsLayers.Vert);
+            bool angleCheck = LastGround.GroundSlopeAngle >= 50f;
+            return layerCheck && angleCheck;
+        }
+    }
     
     private void FixedUpdate()
     {
@@ -221,8 +233,13 @@ public partial class PhysicsController : MonoBehaviour
 
         if (inputDir.sqrMagnitude > 0 && LateralVelocity.sqrMagnitude > 0)
         {
+            float preTurnSpeed = LateralVelocity.magnitude;
             LateralVelocity = LateralVelocity - (LateralVelocity - inputDir.normalized * LateralVelocity.magnitude) *
                 Mathf.Min(friction * Time.deltaTime, 1);
+            float postTurnSpeed = LateralVelocity.magnitude;
+
+            float speedPreserveFactor = Mathf.InverseLerp(maxSpeed / 1.5f, maxSpeed, preTurnSpeed); // NOTE: Turn speed-preservation is hard-coded atm
+            if (IsGrounded) LateralVelocity = LateralVelocity.normalized * Mathf.Lerp(postTurnSpeed, preTurnSpeed, speedPreserveFactor);
         }
 
         if (!IsGrounded)
@@ -265,6 +282,9 @@ public partial class PhysicsController : MonoBehaviour
         float terminalSpeed = physParams.m_terminalSpeed;//20;
         float maxRiseSpeed = physParams.m_maxRiseSpeed; //30;
         float riseDeceleration = physParams.m_riseSpeedDeceleration; //50;
+
+        if (HadJustExitedVertSurface)
+            upGravity = downGravity = 15f;
         
         VerticalVelocity += GravityDir * ((IsFalling ? downGravity : upGravity) * Time.deltaTime);
         

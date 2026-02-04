@@ -12,6 +12,10 @@ namespace FS.Editor.Timeline
         public Timeline Timeline { get; private set; }
         private bool m_isSelected = false;
 
+        /// @brief Unique control ID for drag handling
+        /// <summary></summary>
+        private int m_dragControlId;
+        
         public bool IsDraggingCenter = false;
         public bool IsDraggingStart = false;
         public bool IsDraggingEnd = false;
@@ -59,6 +63,14 @@ namespace FS.Editor.Timeline
 
         public void DrawGUI(Rect trackRect) // Track rect specifies the height & y pos, x & width is determined by the clip
         {
+            // If we think we're dragging but don't own hotControl, something went wrong - reset
+            if ((IsDraggingStart || IsDraggingCenter || IsDraggingEnd) && GUIUtility.hotControl != m_dragControlId)
+            {
+                IsDraggingStart = false;
+                IsDraggingCenter = false;
+                IsDraggingEnd = false;
+            }
+            
             m_slotRect = trackRect;
             
             DrawClipTimelineTrack();
@@ -72,45 +84,56 @@ namespace FS.Editor.Timeline
         // returns center move delta
         public bool DrawDefaultRangedClipSlot(Rect clipRect, ref float start, ref float center, ref float end)
         {
-            var color = IsHovered ? Color.gray1 : Color.black;
+            // Get a consistent control ID for this track's drag operations
+            m_dragControlId = GUIUtility.GetControlID(FocusType.Passive);
+            
+            var color = IsHovered ? Color.gray : Color.black;
             SirenixEditorGUI.DrawRoundRect(clipRect, color, 4);
-            if (IsSelected) // selection rect
+            if (IsSelected)
                 SirenixEditorGUI.DrawRoundRect(clipRect, new Color(0,0,0,0), 6, Color.white, 2);
 
             int rangeControlWidth = 4;
             int rangeControlPadding = 8;
             var leftRect = new Rect(clipRect.x + rangeControlPadding, clipRect.y + 4, rangeControlWidth, clipRect.height - 8);
             var rightRect = new Rect(clipRect.xMax - rangeControlPadding - rangeControlWidth, clipRect.y + 4, rangeControlWidth, clipRect.height - 8);
-            
-            if (IsSelected && Event.current.type == EventType.MouseDown)
+
+            // Handle MouseDown - Start dragging and capture hot control
+            if (IsSelected && Event.current.type == EventType.MouseDown && Event.current.button == 0)
             {
-                if (leftRect.Contains(Event.current.mousePosition) && !IsDraggingCenter &&
-                    !IsDraggingEnd)
+                bool startedDrag = false;
+                
+                if (leftRect.Contains(Event.current.mousePosition))
                 {
                     IsDraggingStart = true;
-                    Event.current.Use();
+                    startedDrag = true;
                 }
-                if (rightRect.Contains(Event.current.mousePosition) && !IsDraggingCenter &&
-                    !IsDraggingStart)
+                else if (rightRect.Contains(Event.current.mousePosition))
                 {
                     IsDraggingEnd = true;
-                    Event.current.Use();
+                    startedDrag = true;
                 }
-                if (clipRect.Contains(Event.current.mousePosition) && !IsDraggingStart &&
-                    !IsDraggingEnd)
+                else if (clipRect.Contains(Event.current.mousePosition))
                 {
                     IsDraggingCenter = true;
+                    startedDrag = true;
+                }
+                
+                if (startedDrag)
+                {
+                    GUIUtility.hotControl = m_dragControlId;
                     Event.current.Use();
                 }
             }
-            else if (Event.current.rawType == EventType.MouseUp) // Mouse up or mouse left timeline track so we wont get a mouse up [hence why we use raw type] (event only happens if in region)
+            
+            // Handle MouseUp - Only process if we own the hot control
+            // Using rawType ensures we catch it even if another control consumed it
+            if (GUIUtility.hotControl == m_dragControlId && Event.current.rawType == EventType.MouseUp)
             {
-                Debug.LogError($"Timeline Editor: Mouse up - stop dragging range control");
-                //if (Event.current.type == EventType.MouseUp && (IsDraggingStart || IsDraggingCenter || IsDraggingEnd)) 
-                //    Event.current.Use();
                 IsDraggingStart = false;
                 IsDraggingEnd = false;
                 IsDraggingCenter = false;
+                GUIUtility.hotControl = 0;
+                Event.current.Use();
             }
 
             float prevStart = start, prevCenter = center, prevEnd = end;
@@ -120,23 +143,23 @@ namespace FS.Editor.Timeline
             bool movedCenter = IsDraggingCenter && DragRect(ref center);
             if (IsHovered)
             {
-                EditorGUIUtility.AddCursorRect(clipRect, MouseCursor.Pan); // TODO: This changes cursor style when hovering over rect
+                EditorGUIUtility.AddCursorRect(clipRect, MouseCursor.Pan);
             }
 
             bool isMovingCenterLeft = center < prevCenter;
             bool isMovingCenterRight = center > prevCenter;
-            bool canMoveCenterLeft = start > 0f; // we're moving right OR
+            bool canMoveCenterLeft = start > 0f;
             bool canMoveCenterRight = end < 1f;
+            
             if (movedCenter && ((isMovingCenterLeft && canMoveCenterLeft) || (isMovingCenterRight && canMoveCenterRight)))
             {
-                // Set start & end based on new center
                 var rangeSize = end - start;
                 start = Timeline.SnapTimelineValue(center - rangeSize / 2);
                 end = Timeline.SnapTimelineValue(center + rangeSize / 2);
             }
             
-            // ensure start is always <= end (either by snap interval or some small value
-            if (end-0.01f <= start)
+            // Ensure start is always < end
+            if (end - 0.01f <= start)
             {
                 if (movedStart) start = end - 0.01f;
                 if (movedEnd) end = start + 0.01f;
@@ -161,20 +184,27 @@ namespace FS.Editor.Timeline
         // returns new center position
         public bool DrawDefaultMarkerClipSlot(Rect clipRect, ref float pos)
         {
+            m_dragControlId = GUIUtility.GetControlID(FocusType.Passive);
+    
             clipRect.width = 12;
             var isHovered = clipRect.Contains(Event.current?.mousePosition ?? Vector2.negativeInfinity);
             var color = isHovered ? Color.white : Color.gray;
             SirenixEditorGUI.DrawRoundRect(clipRect, color, 6);
-            
-            if (Event.current?.type == EventType.MouseDown)
+    
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && clipRect.Contains(Event.current.mousePosition))
             {
-                IsDraggingCenter = clipRect.Contains(Event.current.mousePosition);
+                IsDraggingCenter = true;
+                GUIUtility.hotControl = m_dragControlId;
+                Event.current.Use();
             }
-            else if (Event.current?.type == EventType.MouseUp)
+    
+            if (GUIUtility.hotControl == m_dragControlId && Event.current.rawType == EventType.MouseUp)
             {
                 IsDraggingCenter = false;
+                GUIUtility.hotControl = 0;
+                Event.current.Use();
             }
-            
+    
             return IsDraggingCenter && DragRect(ref pos);
         }
 

@@ -17,6 +17,8 @@ Shader "FreeSkies/Effects/SpeedLines"
             #include "../Library/Transforms.hlsl"
             #include "../Library/Noise/Noise2D.hlsl"
             #include "../Library/UVHelpers.hlsl"
+            #include "../Library/PlayerRenderData.hlsl"
+            #include "Packages/com.abdulal.rendereffects/ShaderLibrary/UVFunctions.hlsl"
 
             #pragma vertex Vert
             #pragma fragment Frag
@@ -46,38 +48,74 @@ Shader "FreeSkies/Effects/SpeedLines"
                                  dot(hash33(s + 1.0), x3)) * w * w, 52);
             }
             
+            float2 PolarCoordinates_AspectCorrect(float2 uv)
+			{
+            	uv -= 0.5f; // Recenter before aspect correction
+            	float2 centeredUV = AspectCorrectUV(uv);
+				float angle = atan2(centeredUV.y, centeredUV.x) / TWO_PI + 0.5; // Make it between [0, 1]
+				float rad = length(centeredUV);
+				return float2(angle, rad);
+			}
+            
             // Out frag function takes as input a struct that contains the screen space coordinate we are going to use to sample our texture. It also writes to SV_Target0, this has to match the index set in the UseTextureFragment(sourceTexture, 0, …) we defined in our render pass script.   
             float3 Frag(Varyings input) : SV_Target0
             {
-                float3 col = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearRepeat, input.texcoord.xy, _BlitMipLevel);
-                return col;
-                float time = _Time.y * 2;
-                // sample the texture using the SAMPLE_TEXTURE2D_X_LOD
-                float2 uv = input.texcoord.xy - 0.5;
-                uv *= 2;
-                //float mr = min(_BlitTextureSize.x, _BlitTextureSize.y);
-                //uv = (uv * 2 - _BlitTextureSize.xy) / mr * 0.5;
-                //uv = uv - 0.5;
-                //uv = AspectCorrectUV(uv);
-                float2 p = 0.5f + normalize(uv) + min(length(uv), 0.05);
-                float3 p3 = 13 * float3(p.xy, 0) + float3(0, 0, time * 0.025f);
-                float noise = simplex3d(p3 * 32) * 0.5f + 0.5f;
-                float dist = abs(clamp(length(uv)/12, 0, 1) * noise * 2 - 1);
-                const float e = 0.3;
-                float stepped = smoothstep(e - 0.5, e + 0.5, noise * (1 - pow(dist, 4)));
-                float final = smoothstep(e - 0.05, e + 0.05, noise * stepped);
-                return col + final;
-                float radialMask = smoothstep(0.35f, 0.75f, length(uv));
-                
-                // Radial Lines
-                float lineLengthNoise = fbm_perlin_2d_01(input.texcoord, 16) * 0.25f;
-                float uvAngle = atan(uv.x / uv.y);
-                float linesRadialWidth = (1 - radialMask) * 0.125f + lineLengthNoise;
-                float lines = smoothstep(0.75f + linesRadialWidth, 0.8f + linesRadialWidth, frac(uvAngle * 12));
-                
-                float speedLines = radialMask * lines;
-                
-                return col + speedLines * 0.1f;
+            	//float4 playerPosCS = TransformWorldToHClip(_PlayerPosition);
+            	//float2 playerScreenPos = (playerPosCS.xy + 1)/2.f;//GetNormalizedScreenSpaceUV(playerPosCS.xy);
+            	//playerScreenPos.y = playerScreenPos.y - 0.5;
+            	float3 col = SAMPLE_TEXTURE2D_LOD(_BlitTexture, sampler_LinearRepeat, input.texcoord, 0);
+            	//float2 toPlayer = playerScreenPos - input.texcoord;
+            	//return length(toPlayer);//(1 - length(toPlayer))*0.25f + col;
+            	//return (1 - length(playerScreenPos)) * 0.2 + col;
+            	float2 polarUV = PolarCoordinates_AspectCorrect(input.texcoord);
+            	float angle = polarUV.x;//fmod(polarUV.x + _Time.y, 1); // [0,1] -> [0, 360]
+            	
+            	// Perturb the angle a bit for noise
+            	float angularNoise = curl_noise_worley_2d(input.texcoord, 32);
+            	angularNoise = (angularNoise - 0.5) * 2;
+            	angle += angularNoise * 0.001;
+            	
+            	int numLines = 64;
+            	int sectorID = floor(numLines * angle); // Primary hash for all randomness so lines are synced
+            	
+            	// Line length variation per-sector
+            	float sectorRandom = RandomFloat(sectorID);
+            	float lineLength = lerp(-0.2, 0.2, sectorRandom);
+            	//lineLength = lerp(0.5, 0.9, lineLength);
+            	
+            	// Radial mask w/ custom line-lengths
+            	float radius = polarUV.y / sqrt(2); // [0,1]
+            	
+            	// Shrink and expand radius randomly based on sector ID
+            	float movSpeed = lerp(16, 32, sectorRandom);
+            	radius += sin(_Time.y * movSpeed) * 0.1f;
+            	//radius = 1-smoothstep(1, lineLength, radius);
+
+            	angle = frac(numLines * angle);
+            	// Wanna remap it so its a gradient at each end, so [0, 1, 0] instead of [0, 1]
+            	angle = 2 * (angle - 0.5f); // [-1, 1]
+            	angle = 1 - angle * angle; // [0, 1, 0]
+            	
+            	// [15 degree width of lines]
+            	float angularWidth = 0.05f;
+            	radius = smoothstep(0.4 + lineLength, 1, radius); // Manipulate this to change line-profile
+            	angularWidth *= radius;
+            	
+            	// Width shifts by radius, getting smaller and shrinking to zero by LineLength
+            	//return saturate(radius - sqrt(2)+0.1);
+            	//return lineLength;
+            	
+            	angle = smoothstep(1 - angularWidth, 1, angle);
+            	float lineMask = step(0.5, angle);
+            	//return col * (1 - lineMask);
+            	float normSpeed = _PlayerLateralSpeed / 15;
+            	return lineMask * normSpeed * lerp(0.2, 1, sectorRandom) + col;
+            	//return (1-lineMask) * col;
+            	return lineMask;
+            	if (angle < 0.95f) angle = 0;
+            	
+            	return angle;
+            	return angle * 0.2f + col;
             }
             ENDHLSL
         }

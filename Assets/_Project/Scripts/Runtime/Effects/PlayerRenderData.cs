@@ -8,6 +8,17 @@ public class PlayerRenderData : MonoBehaviour, ICommandBufferPass
     private PhysicsController m_physics;
     private Camera m_camera;
 
+    private static GlobalKeyword s_player_render_data;
+
+    public static GlobalKeyword PLAYER_RENDER_DATA
+    {
+        get
+        {
+            if (s_player_render_data.name == null) s_player_render_data = GlobalKeyword.Create("PLAYER_RENDER_DATA");
+            return s_player_render_data;
+        }
+    }
+
     public static readonly int k_PlayerSpeedID = Shader.PropertyToID("_PlayerSpeed");
     public static readonly int k_PlayerLateralSpeedID = Shader.PropertyToID("_PlayerLateralSpeed");
     public static readonly int k_PlayerVerticalSpeedID = Shader.PropertyToID("_PlayerVerticalSpeed");
@@ -36,7 +47,7 @@ public class PlayerRenderData : MonoBehaviour, ICommandBufferPass
     {
         if (m_physics == null) return;
         
-        cmd.EnableShaderKeyword("PLAYER_RENDER_DATA");
+        cmd.SetKeyword(PLAYER_RENDER_DATA, true);
         
         // Smoothing for speeds/positions?
         

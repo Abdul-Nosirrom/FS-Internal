@@ -98,6 +98,8 @@ public class JumpAction : GameplayAction, IActionPhysicsReciever, IActionInputEv
         phaseChangePositions.Clear();
 
         m_vertEverActive = m_physics.IsInSkateAction;
+        if (!m_vertEverActive)
+            m_vertEverActive = m_physics.LastStableGround.CompareLayer(PhysicsLayers.Vert) && m_physics.LastStableGround.GroundSlopeAngle > 30f; 
         
         // Spawn jump fx at last ground position and rotation & attach trail to character
         if (m_jumpVFX != null)

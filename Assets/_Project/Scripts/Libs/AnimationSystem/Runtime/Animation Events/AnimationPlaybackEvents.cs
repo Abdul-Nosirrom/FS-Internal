@@ -12,6 +12,12 @@ namespace FS.Animation
         {
             AnimationPlaybackEventManager.RegisterEvent(state, callback, type);
         }
+
+        public static void UnbindPlaybackEvent(this AnimancerState state, Action callback,
+            AnimationPlaybackEventManager.Type type)
+        {
+            AnimationPlaybackEventManager.UnregisterEvent(state, callback, type);
+        }
     }
 
     /// <summary>
@@ -160,6 +166,14 @@ namespace FS.Animation
 
             var entry = new EventEntry(state, callback, type);
             manager.m_eventEntries.Add(entry);
+        }
+
+        public static void UnregisterEvent(AnimancerState state, Action callback, Type type)
+        {
+            if (s_eventManagers.TryGetValue(state.Graph, out var manager))
+            {
+                manager.m_eventEntries.RemoveAll((entry => entry.State == state && entry.Callback == callback && entry.EventType == type));
+            }
         }
 
         public static void DisposeManager(AnimancerGraph graph)

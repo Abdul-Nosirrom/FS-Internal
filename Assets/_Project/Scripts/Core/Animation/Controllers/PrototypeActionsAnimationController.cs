@@ -6,8 +6,6 @@ using UnityEngine;
 public class ActionsAnimationSet : AnimationSet
 {
     // Define properties for actions animations here
-    public SequenceAnimation RailGrindBase;
-    public OneShotAnimation RailSwap;
     public MecanimAnimationAsset LedgeClimb;
     public OneShotAnimation FingerGunBlastJump;
     public OneShotAnimation WhipArmHoverJump;
@@ -21,6 +19,10 @@ public class ActionsAnimationSet : AnimationSet
     public OneShotAnimation HomingAttackImpact;
     public OneShotAnimation HomingAttackEnemyBounce;
     public OneShotAnimation SpringKickWallEject;
+
+    // Railgrind setup
+    public MecanimAnimationAsset RailGrind;
+    public OneShotAnimation RailTrick;
 }
     
 public class PrototypeActionsAnimationController : AnimationController
