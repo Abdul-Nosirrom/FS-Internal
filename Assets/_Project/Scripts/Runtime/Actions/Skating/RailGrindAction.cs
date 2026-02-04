@@ -83,7 +83,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     protected RailFeeler m_feeler;
     private SplineFollower m_grindFollower = new SplineFollower();
     private IAnimation m_railAnimation;
-    private IAnimation m_railTrickAnimation = AnimationReference.Get<ActionsAnimationSet>("RailTrick");
+    private IAnimation m_railTrickAnimation;
     //private IAnimation m_railSwapAnimation;
     
     #endregion
@@ -171,6 +171,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         
         // TODO: Uncomment when animation set is available
         m_railAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailGrind;
+        m_railTrickAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailTrick;
         //m_railSwapAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailSwap;
     }
 
@@ -277,7 +278,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         leanInput = Mathf.Lerp(currentLeanAmount ?? 0, leanInput, 5f * Time.deltaTime);
         AnimRailState?.SetFloat(k_animLeanAmount, leanInput); // Can smooth it
 
-        AnimRailState?.SetFloat(k_animRailSpeed, Mathf.InverseLerp(k_minGrindSpeed, k_maxGrindSpeed, m_grindFollower.m_speed));
+        AnimRailState?.SetFloat(k_animRailSpeed, Mathf.InverseLerp(k_minGrindSpeed, k_maxGrindSpeed, Mathf.Abs(m_grindFollower.m_speed)));
     }
 
     #endregion
@@ -415,8 +416,12 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private IEnumerator PerformSimpleRailTrick()
     {
-        m_railTrickAnimation.Play(m_animator);
-        yield return m_railTrickAnimation.WaitForFadeOut(m_animator);
+        AnimRailState?.CrossFade("Rail Trick", 0.2f, 0, 0);
+        //m_railTrickAnimation.Play(m_animator);
+        //yield return m_railTrickAnimation.WaitForFadeOut(m_animator);
+        yield return AnimRailState?.WaitForFlag(m_animator, AnimationFlags.SKID_END);
+        //yield return m_railTrickAnimation.WaitForTime(m_animator, 0.7f);
+        m_grindFollower.m_speed += 10 * m_grindFollower.DirectionSign;
         if (State == GrindState.Trick) State = GrindState.Default;
     }
     
@@ -553,6 +558,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (prevState == GrindState.Trick && State != GrindState.Trick)
         {
             //m_railTrickAnimation.Stop(m_animator); maybe not needed
+            //m_railAnimation?.Play(m_animator);
         }
         
         // TODO: State management & animation playbacks gonna change heavily once we've got anims in. Prolly Mecanim state machine responding to this ezpz since 

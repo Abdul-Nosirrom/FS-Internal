@@ -136,7 +136,7 @@ namespace FS.UI.Editor
             Undo.RecordObject(m_target, "Modify Tween Animation");
             
             m_tweenTimeline.Duration = m_target.m_totalDuration;
-            Vector2 timelineSize = new Vector2(EditorGUIUtility.currentViewWidth - 36, 300);
+            Vector2 timelineSize = new Vector2(Screen.width, 300);
             m_tweenTimeline.DoGUI(timelineSize);
 
 

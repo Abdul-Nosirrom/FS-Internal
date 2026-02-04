@@ -78,15 +78,20 @@ namespace FS.Animation.Editor
 
                 // TODO: No support for playing backwards at the moment (negative speeds)
                 float newTime = Mathf.Repeat(state.NormalizedTime + m_timeControl.deltaTime/state.Length, 1f);
+                newTime = state.Time + m_timeControl.deltaTime;
                 
                 // NOTE: We want to update the time this way rather than set it to currentTime so loop counts properly function as they may be used in events
-                if (m_timeControl.deltaTime < 0 || (newTime < state.NormalizedTime)) // Scrubbing backwards, or looped around (moveTime would trigger all events backwards)
-                    state.NormalizedTime = newTime;
+                if (m_timeControl.deltaTime < 0 || (newTime < state.Time)) // Scrubbing backwards, or looped around (moveTime would trigger all events backwards)
+                    state.Time = newTime;
                 else
                 {
-                    state.MoveTime(newTime, true);
+                    state.MoveTime(newTime, false);
                     // TODO: Below needs to be adjusted to get EndEvents to trigger
                 }
+                
+                // Ensure we wrap around
+                if (state.NormalizedTime is >= 1 or <= 0)
+                    state.NormalizedTime = Mathf.Repeat(state.NormalizedTime, 1f);
                 
                 
                 // Ensure times are synced
