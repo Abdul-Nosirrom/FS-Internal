@@ -14,7 +14,7 @@ namespace FS.Animation
 {
     public interface IActionAnimationFlagReciever
     {
-        public void OnAnimationFlag(TagSet flags);
+        public void OnAnimationFlag(ITagSource flags);
     }
     
     /// <summary>
@@ -163,8 +163,8 @@ namespace FS.Animation
             m_actionController = GetComponentInParent<ActionController>();
         }
 
-        public event Action<TagSet> OnAnimationFlagBroadcast;
-        public void BroadcastAnimationFlag(TagSet flags)
+        public event Action<ITagSource> OnAnimationFlagBroadcast;
+        public void BroadcastAnimationFlag(ITagSource flags)
         {
             OnAnimationFlagBroadcast?.Invoke(flags);
             if (m_actionController)

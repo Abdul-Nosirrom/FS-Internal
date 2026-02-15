@@ -81,21 +81,19 @@ namespace FS.GameplayActions
         
         #region API
 
-        public IEnumerable<T> IterateAllActions<T>()
-        {
-            foreach (var action in m_allActions)
-            {
-                if (action is T actionT) yield return actionT;
-            }
-        }
+        /// <summary>
+        /// Iterates all registered actions that implement the given interface.
+        /// Zero-allocation struct enumerator — no state machine overhead.
+        /// </summary>
+        public FilteredActionEnumerator<T> IterateAllActions<T>()
+            => new(m_allActions);
         
-        public IEnumerable<T> IterateActiveActions<T>()
-        {
-            foreach (var action in m_activeActions.Actions)
-            {
-                if (action is T actionT) yield return actionT;
-            }
-        }
+        /// <summary>
+        /// Iterates currently active actions that implement the given interface.
+        /// Zero-allocation struct enumerator with re-entrancy safe snapshot iteration.
+        /// </summary>
+        public FilteredActionEnumerator<T> IterateActiveActions<T>()
+            => new(m_activeActions.Actions, m_activeActions);
         
         public bool HasActiveAction<T>() where T : GameplayAction
         {

@@ -434,7 +434,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         AnimRailState?.CrossFade("Rail Trick", 0.2f, 0, 0);
         //m_railTrickAnimation.Play(m_animator);
         //yield return m_railTrickAnimation.WaitForFadeOut(m_animator);
-        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation_.RailGrind_.TrickEnd);
+        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation.RailGrind.TrickEnd);
         //yield return m_railTrickAnimation.WaitForTime(m_animator, 0.7f);
         m_grindFollower.m_speed += 10 * m_grindFollower.DirectionSign;
         if (State == GrindState.Trick) State = GrindState.Default;
@@ -532,7 +532,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         m_physics.Velocity = Vector3.zero;
         
         // Wait for rebound flag
-        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation_.RailGrind_.Rebound);
+        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation.RailGrind.Rebound);
 
         // Launch in reverse direction
         m_grindFollower.m_speed = k_reboundSpeed * -originalDirectionSign;

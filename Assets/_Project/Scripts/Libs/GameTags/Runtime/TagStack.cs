@@ -21,6 +21,7 @@ namespace FS.TagSystem
     public class TagStack : ITagSource
     {
         private Dictionary<Tag, int> m_tagCounts = new();
+        private List<Tag> m_activeTags = new(); // Synced list for indexing of ITagSource
 
         /// <summary>Fires when a tag transitions from absent to present (0 → 1).</summary>
         public event Action<Tag> OnTagAdded;
@@ -49,6 +50,8 @@ namespace FS.TagSystem
 
             if (count == 0)
             {
+                // newly added tag, sync list
+                m_activeTags.Add(tag);
                 OnTagAdded?.Invoke(tag);
             }
         }
@@ -65,6 +68,7 @@ namespace FS.TagSystem
             int newCount = count - 1;
             if (newCount <= 0)
             {
+                m_activeTags.Remove(tag);
                 m_tagCounts.Remove(tag);
                 OnTagCountChanged?.Invoke(tag, 0);
                 OnTagRemoved?.Invoke(tag);
@@ -76,27 +80,25 @@ namespace FS.TagSystem
             }
         }
 
-        /// <summary>Returns true if the tag has a count greater than 0.</summary>
-        public bool Has(Tag tag)
-        {
-            return m_tagCounts.TryGetValue(tag, out int count) && count > 0;
-        }
-
         /// <summary>Returns the current reference count for a tag.</summary>
         public int GetCount(Tag tag)
         {
             return m_tagCounts.GetValueOrDefault(tag, 0);
         }
+        
+        #region ITagSource Implementation
+        
+        public int Count => m_tagCounts.Count;
 
-        /// <summary>Returns true if any active tag matches the given tag hierarchy.</summary>
-        public bool HasAny(Tag parent)
+        public Tag this[int idx] => m_activeTags[idx];
+
+        /// <summary>Returns true if the tag has a count greater than 0.</summary>
+        public bool Has(Tag tag)
         {
-            foreach (var kvp in m_tagCounts)
-            {
-                if (kvp.Value > 0 && kvp.Key.MatchesTag(parent)) return true;
-            }
-            return false;
+            return m_tagCounts.TryGetValue(tag, out int count) && count > 0;
         }
+        
+        #endregion
 
         /// <summary>
         /// Removes all references for a tag, regardless of count.
@@ -104,6 +106,8 @@ namespace FS.TagSystem
         /// </summary>
         public void RemoveAll(Tag tag)
         {
+            m_activeTags.Remove(tag);
+            
             if (m_tagCounts.TryGetValue(tag, out int count) && count > 0)
             {
                 m_tagCounts.Remove(tag);
@@ -115,6 +119,7 @@ namespace FS.TagSystem
         /// <summary>Clears all tags and fires <see cref="OnTagRemoved"/> for each.</summary>
         public void Clear()
         {
+            m_activeTags.Clear();
             foreach (var kvp in m_tagCounts)
             {
                 if (kvp.Value > 0)

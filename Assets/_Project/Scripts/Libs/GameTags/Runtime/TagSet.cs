@@ -39,12 +39,12 @@ namespace FS.TagSystem
         /// <summary>Ordered read-only view of all tags in this set.</summary>
         public IReadOnlyList<Tag> Tags => m_serializedTags;
 
-        public static implicit operator TagSet(Tag tag)
-        {
-            TagSet set = new();
-            set.Add(tag);
-            return set;
-        }
+        // public static implicit operator TagSet(Tag tag)
+        // {
+        //     TagSet set = new();
+        //     set.Add(tag);
+        //     return set;
+        // }
 
         public Tag this[int idx] => Tags[idx];
 
@@ -64,57 +64,6 @@ namespace FS.TagSystem
 
         /// <summary>Returns true if the exact tag is present.</summary>
         public bool Has(Tag tag) => m_tags.Contains(tag);
-
-        /// <summary>
-        /// Returns true if any tag in this set matches the given tag hierarchy.
-        /// e.g. if set has "Animation.Skid.Start", HasAny(Tag.Animation.Skid) returns true.
-        /// </summary>
-        public bool HasAny(Tag parent)
-        {
-            foreach (var tag in m_tags)
-            {
-                if (tag.MatchesTag(parent)) return true;
-            }
-
-            return false;
-        }
-
-        #endregion
-
-        #region Set vs Set Operations
-
-        /// <summary>Returns true if this set has ALL tags from the other set (exact match).</summary>
-        public bool HasAll(TagSet other)
-        {
-            foreach (var tag in other.m_tags)
-            {
-                if (!Has(tag)) return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>Returns true if this set shares ANY exact tag with the other.</summary>
-        public bool HasAny(TagSet other)
-        {
-            foreach (var tag in other.m_tags)
-            {
-                if (Has(tag)) return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>Returns true if this set has NONE of the tags from the other.</summary>
-        public bool HasNone(TagSet other)
-        {
-            foreach (var tag in other.m_tags)
-            {
-                if (Has(tag)) return false;
-            }
-
-            return true;
-        }
 
         #endregion
 

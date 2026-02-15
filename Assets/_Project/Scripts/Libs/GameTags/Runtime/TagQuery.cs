@@ -10,11 +10,18 @@ namespace FS.TagSystem
     /// </summary>
     public interface ITagSource
     {
+        /// <summary>
+        /// Number of tags this ITagSource as
+        /// </summary>
+        public int Count { get; }
+        
+        /// <summary>
+        /// Indexer into tags of this ITagSource (Tag implementation returns itself obv)
+        /// </summary>
+        public Tag this[int idx] { get; }
+        
         /// <summary>Returns true if the exact tag is present.</summary>
         bool Has(Tag tag);
-        
-        /// <summary>Returns true if any contained tag matches the given tag hierarchy.</summary>
-        bool HasAny(Tag parent);
     }
     
     /// <summary>
@@ -24,22 +31,40 @@ namespace FS.TagSystem
     /// </summary>
     public static class TagSourceExtensions
     {
+        public static bool HasNone<T>(this T source, ITagSource other) where T : ITagSource
+        {
+            for (int i = 0; i < other.Count; i++)
+            {
+                if (source.Has(other[i])) return false;
+            }
+            return true;
+        }
+        
         #region HasAny — Fixed Overloads (Zero Allocation)
+
+        public static bool HasAny<T>(this T source, ITagSource other) where T : ITagSource
+        {
+            for (int i = 0; i < other.Count; i++)
+            {
+                if (source.Has(other[i])) return true;
+            }
+            return false;
+        }
         
         /// <summary>Returns true if the source has any of the given tags.</summary>
-        public static bool HasAny(this ITagSource source, Tag a, Tag b)
+        public static bool HasAny<T>(this T source, Tag a, Tag b) where T : ITagSource
             => source.Has(a) || source.Has(b);
         
         /// <summary>Returns true if the source has any of the given tags.</summary>
-        public static bool HasAny(this ITagSource source, Tag a, Tag b, Tag c) 
+        public static bool HasAny<T>(this T source, Tag a, Tag b, Tag c) where T : ITagSource
             => source.Has(a) || source.Has(b) || source.Has(c);
         
         /// <summary>Returns true if the source has any of the given tags.</summary>
-        public static bool HasAny(this ITagSource source, Tag a, Tag b, Tag c, Tag d) 
+        public static bool HasAny<T>(this T source, Tag a, Tag b, Tag c, Tag d) where T : ITagSource
             => source.Has(a) || source.Has(b) || source.Has(c) || source.Has(d);
         
         /// <summary>Returns true if the source has any of the given tags. Allocates an array — prefer fixed overloads for 2-4 tags.</summary>
-        public static bool HasAny(this ITagSource source, params Tag[] tags)
+        public static bool HasAny<T>(this T source, params Tag[] tags) where T : ITagSource
         {
             foreach (var tag in tags)
             {
@@ -52,20 +77,29 @@ namespace FS.TagSystem
         
         #region HasAll — Fixed Overloads (Zero Allocation)
         
+        public static bool HasAll<T>(this T source, ITagSource other) where T : ITagSource
+        {
+            for (int i = 0; i < other.Count; i++)
+            {
+                if (!source.Has(other[i])) return false;
+            }
+            return true;
+        }
+        
         /// <summary>Returns true if the source has all of the given tags.</summary>
-        public static bool HasAll(this ITagSource source, Tag a, Tag b) 
+        public static bool HasAll<T>(this T source, Tag a, Tag b) where T : ITagSource
             => source.Has(a) && source.Has(b);
         
         /// <summary>Returns true if the source has all of the given tags.</summary>
-        public static bool HasAll(this ITagSource source, Tag a, Tag b, Tag c) 
+        public static bool HasAll<T>(this T source, Tag a, Tag b, Tag c) where T : ITagSource
             => source.Has(a) && source.Has(b) && source.Has(c);
         
         /// <summary>Returns true if the source has all of the given tags.</summary>
-        public static bool HasAll(this ITagSource source, Tag a, Tag b, Tag c, Tag d) 
+        public static bool HasAll<T>(this T source, Tag a, Tag b, Tag c, Tag d) where T : ITagSource
             => source.Has(a) && source.Has(b) && source.Has(c) && source.Has(d);
         
         /// <summary>Returns true if the source has all of the given tags. Allocates an array — prefer fixed overloads for 2-4 tags.</summary>
-        public static bool HasAll(this ITagSource source, params Tag[] tags)
+        public static bool HasAll<T>(this T source, params Tag[] tags) where T : ITagSource
         {
             foreach (var tag in tags)
             {
@@ -77,7 +111,7 @@ namespace FS.TagSystem
         #endregion
         
         /// <summary>Evaluates a <see cref="TagQuery"/> against this tag source.</summary>
-        public static bool Matches(this ITagSource source, TagQuery query) => query.Matches(source);
+        public static bool Matches<T>(this T source, TagQuery query) where T : ITagSource => query.Matches(source);
     }
     
     /// <summary>

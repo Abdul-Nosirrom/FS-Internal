@@ -82,7 +82,7 @@ public class SkiddingAction : GameplayAction, IActionPhysicsReciever
         m_isAllowedToBoostOut = m_startSpeed >= k_minSpeedForSkidLaunch;
 
         CurrentSkidState = SkidState.Decelerating;
-        m_skidAnim.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SkidBoost, OnSkidBoostOut);
+        m_skidAnim.Play(m_animator).OnFlag(m_animator, Tag.Animation.SkidBoost, OnSkidBoostOut);
         
         m_boostDir = -m_physics.transform.forward;
     }

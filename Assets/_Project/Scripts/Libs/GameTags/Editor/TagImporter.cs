@@ -105,7 +105,9 @@ namespace FS.TagSystem.Editor
                         sb.AppendLine($"{pad}/// <summary>{EscapeXml(branchDesc.ToString())}</summary>");
                     }
 
-                    sb.AppendLine($"{pad}public static readonly {typeName} {key} = new();");
+                    string additionalKeyword = string.IsNullOrEmpty(parentPath) ? "static " : "";
+
+                    sb.AppendLine($"{pad}public {additionalKeyword}readonly {typeName} {key} = new();");
                     sb.AppendLine();
 
                     // Class definition
@@ -117,7 +119,8 @@ namespace FS.TagSystem.Editor
                     sb.AppendLine($"{pad}public class {typeName}");
                     sb.AppendLine($"{pad}{{");
                     sb.AppendLine($"{pad}    public const string Path = \"{fullPath}\";");
-                    sb.AppendLine($"{pad}    public static implicit operator Tag({typeName} _) => new(\"{fullPath}\");");
+                    sb.AppendLine($"{pad}    private static readonly Tag _internal = new(\"{fullPath}\");");
+                    sb.AppendLine($"{pad}    public static implicit operator Tag({typeName} _) => _internal;");
                     sb.AppendLine();
 
                     WriteNode(sb, childObj, fullPath, indent + 1);
@@ -130,7 +133,9 @@ namespace FS.TagSystem.Editor
                     // Leaf — generate a readonly Tag constant
                     string desc = property.Value.ToString();
                     sb.AppendLine($"{pad}/// <summary>{EscapeXml(desc)}</summary>");
-                    sb.AppendLine($"{pad}public static readonly Tag {key} = new(\"{fullPath}\");");
+                    // Static field accessed via per-instance property, so we can access it through parent instance (e.g. Animation.SkidBoost instead of Animation_.SkidBoost')
+                    sb.AppendLine($"{pad}private static readonly Tag _internal_{key} = new(\"{fullPath}\");");
+                    sb.AppendLine($"{pad}public Tag {key} => _internal_{key};");
                     sb.AppendLine($"{pad}public const string {key}_Path = \"{fullPath}\";");
                     sb.AppendLine();
                 }

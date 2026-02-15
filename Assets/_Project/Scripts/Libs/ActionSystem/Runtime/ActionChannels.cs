@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.Assertions;
 
@@ -28,62 +27,153 @@ namespace FS.GameplayActions
     
     public static class ActionChannelUtils
     {
-        //private const int k_numChannels = 5;
-        
         // Get the highest bit position in the enum (calculated at startup)
-        private static readonly int k_maxBits = Enum.GetValues(typeof(ActionChannel))
-            .Cast<ActionChannel>()
-            .Where(v => v != 0)  // Skip zero if present
-            .Select(v => GetHighestBitPosition((int)v))
-            .DefaultIfEmpty(0)
-            .Max() + 1;
+        private static readonly int k_maxBits = CalculateMaxBits();
 
-        private static int GetHighestBitPosition(int value)
+        /// <summary>
+        /// Bitmask of all defined single-bit flags (excludes composites like Physics).
+        /// Pre-computed at startup to avoid Enum.IsDefined per iteration.
+        /// </summary>
+        private static readonly int k_definedBitMask = CalculateDefinedBitMask();
+
+        private static int CalculateMaxBits()
         {
-            int position = 0;
-            while (value > 0)
+            int max = 0;
+            foreach (ActionChannel v in Enum.GetValues(typeof(ActionChannel)))
             {
-                value >>= 1;
-                position++;
+                if (v == 0) continue;
+                int pos = 0;
+                int val = (int)v;
+                while (val > 0) { val >>= 1; pos++; }
+                if (pos > max) max = pos;
             }
-            return position;
+            return max;
+        }
+
+        private static int CalculateDefinedBitMask()
+        {
+            int mask = 0;
+            for (int i = 0; i < k_maxBits; i++)
+            {
+                int flag = 1 << i;
+                if (Enum.IsDefined(typeof(ActionChannel), (ActionChannel)flag))
+                {
+                    mask |= flag;
+                }
+            }
+            return mask;
         }
         
         /// <summary>
         /// Iterate over all defined ActionChannel enum values
         /// </summary>
-        public static IEnumerable<ActionChannel> IterateChannels()
-        {
-            for (int i = 0; i < k_maxBits; i++)
-            {
-                ActionChannel flag = (ActionChannel)(1 << i);
-            
-                // Only check defined flags
-                if (Enum.IsDefined(typeof(ActionChannel), flag))
-                {
-                    yield return flag;
-                }
-            }
-        }
+        public static ChannelEnumerator IterateChannels()
+            => new((ActionChannel)k_definedBitMask);
         
         /// <summary>
-        /// Iterate over all defined ActionChannel enum values that are set in the provided channels
-        /// E.g. if channels = Movement | Rotation, this will return Movement and Rotation
+        /// Iterate over all defined ActionChannel enum values that are set in the provided channels.
+        /// E.g. if channels = Movement | Rotation, this will return Movement and Rotation.
         /// </summary>
         /// <returns>All channels contained in the passed in channels parameter</returns>
-        public static IEnumerable<ActionChannel> IterateChannels(ActionChannel channels)
+        public static ChannelEnumerator IterateChannels(ActionChannel channels)
+            => new(channels);
+
+        /// <summary>
+        /// Zero-allocation struct enumerator for iterating individual channel flags.
+        /// Uses bit manipulation to extract set bits — no Enum.IsDefined or state machine overhead.
+        /// </summary>
+        public struct ChannelEnumerator
         {
-            for (int i = 0; i < k_maxBits; i++)
+            private int m_remaining;
+            private ActionChannel m_current;
+
+            internal ChannelEnumerator(ActionChannel channels)
             {
-                ActionChannel flag = (ActionChannel)(1 << i);
+                // Mask to only defined single-bit flags (filters out composites like Physics)
+                m_remaining = (int)channels & k_definedBitMask;
+                m_current = 0;
+            }
+
+            public ActionChannel Current => m_current;
+
+            public bool MoveNext()
+            {
+                if (m_remaining == 0) return false;
+                
+                // Extract lowest set bit
+                int lowest = m_remaining & (-m_remaining);
+                m_current = (ActionChannel)lowest;
+                m_remaining &= ~lowest;
+                return true;
+            }
+
+            public ChannelEnumerator GetEnumerator() => this;
+        }
+    }
+    
+    /// <summary>
+    /// Zero-allocation struct enumerator that filters a list of actions by interface/type.
+    /// Manages iteration depth on <see cref="ActionChannelContainer"/> automatically to prevent
+    /// buffer rebuilds during iteration (re-entrancy safety).
+    /// <para>foreach calls Dispose on loop exit (including break/return), which decrements the depth counter.</para>
+    /// </summary>
+    public struct FilteredActionEnumerator<T> : IDisposable
+    {
+        private readonly IReadOnlyList<GameplayAction> m_source;
+        private readonly ActionChannelContainer m_container; // null for non-active-action iteration (e.g. m_allActions)
+        private int m_index;
+        private T m_current;
+        private bool m_started;
+
+        internal FilteredActionEnumerator(IReadOnlyList<GameplayAction> source, ActionChannelContainer container = null)
+        {
+            m_source = source;
+            m_container = container;
+            m_index = -1;
+            m_current = default;
+            m_started = false;
+        }
+
+        public T Current => m_current;
+
+        public bool MoveNext()
+        {
+            // Begin tracking iteration depth on first MoveNext, not construction,
+            // so there's no cost if enumerator is created but never iterated
+            if (!m_started && m_container != null)
+            {
+                m_container.BeginIteration();
+                m_started = true;
+            }
             
-                // Only check defined flags
-                if (Enum.IsDefined(typeof(ActionChannel), flag) && channels.HasFlag(flag))
+            while (++m_index < m_source.Count)
+            {
+                if (m_source[m_index] is T typed)
                 {
-                    yield return flag;
+                    m_current = typed;
+                    return true;
                 }
             }
+
+            // Exhausted — release depth lock
+            Dispose();
+            return false;
         }
+
+        /// <summary>
+        /// Called automatically by foreach on any exit path (completion, break, return, exception).
+        /// Decrements iteration depth so the buffer can rebuild on next access.
+        /// </summary>
+        public void Dispose()
+        {
+            if (m_started && m_container != null)
+            {
+                m_container.EndIteration();
+                m_started = false;
+            }
+        }
+
+        public FilteredActionEnumerator<T> GetEnumerator() => this;
     }
     
     /// <summary>
@@ -98,8 +188,43 @@ namespace FS.GameplayActions
         /// </summary>
         private readonly HashSet<GameplayAction> m_activeActions = new();
         
+        /// <summary>
+        /// Reusable buffer for safe iteration over active actions.
+        /// Avoids allocations from ToArray() while preventing collection-modified exceptions
+        /// when actions start/end during iteration. Only rebuilt when dirty AND no one is
+        /// currently iterating (depth == 0).
+        /// </summary>
+        private readonly List<GameplayAction> m_iterationBuffer = new();
+        private bool m_iterationBufferDirty = true;
+        private int m_iterationDepth;
+        
         public IEnumerable<ActionChannel> Channels => m_actionsByChannel.Keys;
-        public IEnumerable<GameplayAction> Actions => m_activeActions.ToArray();
+        
+        /// <summary>
+        /// Returns a snapshot of currently active actions safe for iteration.
+        /// Defers rebuilds while iteration is in progress to prevent re-entrancy corruption.
+        /// The returned list is reused — do not cache across frames.
+        /// </summary>
+        public IReadOnlyList<GameplayAction> Actions
+        {
+            get
+            {
+                if (m_iterationBufferDirty && m_iterationDepth == 0)
+                {
+                    m_iterationBuffer.Clear();
+                    m_iterationBuffer.AddRange(m_activeActions);
+                    m_iterationBufferDirty = false;
+                }
+
+                return m_iterationBuffer;
+            }
+        }
+        
+        /// <summary>Increment iteration depth — prevents buffer rebuild while iterating.</summary>
+        internal void BeginIteration() => m_iterationDepth++;
+        
+        /// <summary>Decrement iteration depth — allows buffer rebuild once all iterators are done.</summary>
+        internal void EndIteration() => m_iterationDepth--;
 
         /// <summary>
         /// Constructor registers event handlers for the provided actions, but does not activate them.
@@ -119,26 +244,40 @@ namespace FS.GameplayActions
             private set => m_actionsByChannel[channel] = value;
         }
 
-        public bool ContainsAnyChannel(ActionChannel channels) 
-            => ActionChannelUtils.IterateChannels(channels).Any(channel => m_actionsByChannel.ContainsKey(channel));
+        public bool ContainsAnyChannel(ActionChannel channels)
+        {
+            foreach (var channel in ActionChannelUtils.IterateChannels(channels))
+            {
+                if (m_actionsByChannel.ContainsKey(channel)) return true;
+            }
+            return false;
+        }        
         
-        
-        public bool ContainsAllChannels(ActionChannel channels) 
-            => ActionChannelUtils.IterateChannels(channels).All(channel => m_actionsByChannel.ContainsKey(channel));
+        public bool ContainsAllChannels(ActionChannel channels)
+        {
+            foreach (var channel in ActionChannelUtils.IterateChannels(channels))
+            {
+                if (!m_actionsByChannel.ContainsKey(channel)) return false;
+            }
+            return true;
+        }
 
         public void CancelAllActions()
         {
             while (m_activeActions.Count > 0)
             {
-                // HashSet doesn't have indexed access, but we can do this:
-                var currentAction = m_activeActions.First(); // Struct enumerator, minimal allocation
-        
+                // HashSet.GetEnumerator() returns a struct enumerator — no allocation
+                using var enumerator = m_activeActions.GetEnumerator();
+                if (!enumerator.MoveNext()) break;
+                var currentAction = enumerator.Current;
+
                 // Throw if failed to end the action
-                if (!currentAction.TryEndAction(null))
+                if (!currentAction!.TryEndAction(null))
                 {
-                    throw new NotSupportedException($"[ActionSystem] Action [{currentAction.actionName}] failed to end during cancellation");
+                    throw new NotSupportedException(
+                        $"[ActionSystem] Action [{currentAction.actionName}] failed to end during cancellation");
                 }
-                
+        
                 m_activeActions.Remove(currentAction);
             }
         }
@@ -174,6 +313,7 @@ namespace FS.GameplayActions
                         "[ActionSystem] Action failed to end in channel");
                     this[channel] = startedAction;
                     m_activeActions.Add(startedAction);
+                    m_iterationBufferDirty = true;
                 }
             }
         }
@@ -191,6 +331,7 @@ namespace FS.GameplayActions
                 {
                     m_actionsByChannel.Remove(channel);
                     m_activeActions.Remove(endedAction);
+                    m_iterationBufferDirty = true;
                 }
             }
         }

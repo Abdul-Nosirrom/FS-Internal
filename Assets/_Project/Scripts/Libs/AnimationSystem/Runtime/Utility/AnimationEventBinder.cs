@@ -40,9 +40,9 @@ namespace FS.Animation
         /// Automatically unbinds if the animation fades out before the flag is triggered.
         /// Only invokes if the state is still active when the flag is broadcast.
         /// </summary>
-        public static void OnFlag(this AnimancerState state, FSAnimator animator, TagSet flags, Action callback)
+        public static void OnFlag<T>(this AnimancerState state, FSAnimator animator, T flags, Action callback) where T : ITagSource
         {
-            var binding = new FlagBinding(state, animator, flags, callback);
+            var binding = new FlagBinding<T>(state, animator, flags, callback);
             binding.Subscribe();
         }
 
@@ -57,15 +57,15 @@ namespace FS.Animation
             state.BindPlaybackEvent(wrapper, type);
         }
         
-        private class FlagBinding
+        private class FlagBinding<T> where T : ITagSource
         {
             private readonly AnimancerState m_state;
             private readonly FSAnimator m_animator;
-            private readonly TagSet m_flags;
+            private readonly T m_flags;
             private readonly Action m_callback;
             private bool m_isCleanedUp;
 
-            public FlagBinding(AnimancerState state, FSAnimator animator, TagSet flags, Action callback)
+            public FlagBinding(AnimancerState state, FSAnimator animator, T flags, Action callback)
             {
                 m_state = state;
                 m_animator = animator;
@@ -89,7 +89,7 @@ namespace FS.Animation
                 m_state.UnbindPlaybackEvent(Cleanup, AnimationPlaybackEventManager.Type.BeginFadeOut);
             }
 
-            private void OnFlagBroadcasted(TagSet flag)
+            private void OnFlagBroadcasted(ITagSource flag)
             {
                 if (!m_state.IsValid())
                 {

@@ -205,14 +205,14 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
             case State.Dash:
                 break;
             case State.WallHold:
-                m_anim_wallEject.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SpringKick_.WallEject, ExecuteWallEject);
+                m_anim_wallEject.Play(m_animator).OnFlag(m_animator, Tag.Animation.SpringKick.WallEject, ExecuteWallEject);
                 break;
             case State.WallEject:
                 break;
             case State.HomingAttack:
                 break;
             case State.EnemyStep:
-                m_anim_homingEnemyBounce.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SpringKick_.EnemyBounce, CompleteEnemyStep);
+                m_anim_homingEnemyBounce.Play(m_animator).OnFlag(m_animator, Tag.Animation.SpringKick.EnemyBounce, CompleteEnemyStep);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(newState), newState, null);
@@ -476,7 +476,7 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     {
         m_physics.Velocity = Vector3.zero;
         
-        AnimationFlag.TryGetFlagTime(m_anim_homingEnemyBounce, Tag.Animation_.SpringKick_.EnemyBounce, out var bounceTime);
+        AnimationFlag.TryGetFlagTime(m_anim_homingEnemyBounce, Tag.Animation.SpringKick.EnemyBounce, out var bounceTime);
         float alpha = Easing.Evaluate(m_sinceStateChange / bounceTime, Ease.OutQuad);
         var targetPos = Vector3.Lerp(m_positionOnStateChange, m_homingAttackTarget.Target.transform.position, alpha);
         m_physics.SetPosition(targetPos);

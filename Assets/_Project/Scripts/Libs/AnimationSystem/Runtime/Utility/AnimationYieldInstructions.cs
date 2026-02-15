@@ -29,14 +29,14 @@ namespace FS.Animation
         /// <summary>
         /// Wait for a specific animation flag to be broadcast while this state is active.
         /// </summary>
-        public static WaitForAnimationFlag WaitForFlag(this AnimancerState state, FSAnimator animator, TagSet flag) => new(state, animator, flag);
+        public static WaitForAnimationFlag<T> WaitForFlag<T>(this AnimancerState state, FSAnimator animator, T flag) where T : ITagSource => new(state, animator, flag);
 
         // IAnimation overloads - convenience for when you have the animation asset but not the state
         
         public static WaitForAnimationFadeOut WaitForFadeOut(this IAnimation anim, FSAnimator animator) => new(anim.GetState(animator));
         public static WaitForEndFadeIn WaitForFadeIn(this IAnimation anim, FSAnimator animator) => new(anim.GetState(animator));
         public static WaitForNormalizedTime WaitForTime(this IAnimation anim, FSAnimator animator, float normalizedTime) => new(anim.GetState(animator), normalizedTime);
-        public static WaitForAnimationFlag WaitForFlag(this IAnimation anim, FSAnimator animator, TagSet flag) => new(anim.GetState(animator), animator, flag);
+        public static WaitForAnimationFlag<T> WaitForFlag<T>(this IAnimation anim, FSAnimator animator, T flag) where T : ITagSource => new(anim.GetState(animator), animator, flag);
     }
 
     /// <summary>
@@ -190,13 +190,13 @@ namespace FS.Animation
     /// yield return myState.WaitForFlag(animator, Tag.WallEject);
     /// Debug.Log("WallEject flag was broadcast!");
     /// </example>
-    public class WaitForAnimationFlag : AnimationYieldBase
+    public class WaitForAnimationFlag<T> : AnimationYieldBase where T : ITagSource
     {
         private FSAnimator m_animator;
-        private TagSet m_flag;
+        private T m_flag;
         private bool m_wasFlagBroadcasted;
 
-        public WaitForAnimationFlag(AnimancerState state, FSAnimator animator, TagSet flag) : base(state)
+        public WaitForAnimationFlag(AnimancerState state, FSAnimator animator, T flag) : base(state)
         {
             m_animator = animator;
             m_flag = flag;
@@ -217,7 +217,7 @@ namespace FS.Animation
             }
         }
 
-        private void OnFlagBroadcasted(TagSet flag)
+        private void OnFlagBroadcasted(ITagSource flag)
         {
             // Check if any of our target flags were broadcast
             if (m_flag.HasAny(flag))
@@ -233,7 +233,7 @@ namespace FS.Animation
                 m_animator.OnAnimationFlagBroadcast -= OnFlagBroadcasted;
                 m_animator = null;
             }
-            m_flag = null;
+            m_flag = default;
         }
     }
 }

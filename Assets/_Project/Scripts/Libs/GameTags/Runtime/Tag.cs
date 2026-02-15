@@ -18,7 +18,7 @@ namespace FS.TagSystem
     /// </code>
     /// </summary>
     [Serializable]
-    public partial struct Tag : IEquatable<Tag>, ISerializationCallbackReceiver
+    public partial struct Tag : ITagSource, IEquatable<Tag>, ISerializationCallbackReceiver
     {
         [SerializeField] private string m_value;
 
@@ -32,6 +32,16 @@ namespace FS.TagSystem
         
         /// <summary>Implicit conversion to string, returns the tag's full path value.</summary>
         public static implicit operator string(Tag tag) => tag.Value;
+
+        #region ITagSource
+
+        public int Count => 1;
+
+        public Tag this[int idx] => idx != 0 ? throw new ArgumentOutOfRangeException(nameof(idx)) : this;
+
+        public bool Has(Tag tag) => this.Equals(tag);
+
+        #endregion
 
         #region Hierarchical Matching
 
