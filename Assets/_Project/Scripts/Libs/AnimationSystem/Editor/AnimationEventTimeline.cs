@@ -1,8 +1,12 @@
-﻿using System;
+﻿// ============================================================================
+// AnimationEvent integration with the generic timeline editor.
+// Supports both ranged events (bars with edge-resize) and instant events (markers).
+// ============================================================================
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using FS.Editor;
 using FS.Editor.Timeline;
 using FS.Extensions;
 using Sirenix.OdinInspector;
@@ -13,91 +17,77 @@ using UnityEngine;
 
 namespace FS.Animation.Editor
 {
-    public class AnimationEventTrack : TimelineTrack
+    // ========================================================================
+    // ITimelineElement adapter for FSAnimationEvent
+    // ========================================================================
+    public class AnimationEventElement : ITimelineElement
     {
-        public FSAnimationEvent m_event;
-        private InspectorProperty m_eventProp;
-        
-        public AnimationEventTrack(Timeline owner, FSAnimationEvent animEvent, InspectorProperty evtProp) : base(owner)
+        private readonly FSAnimationEvent m_event;
+        private readonly InspectorProperty m_eventProp;
+
+        public FSAnimationEvent Event => m_event;
+        public InspectorProperty EventProperty => m_eventProp;
+
+        public AnimationEventElement(FSAnimationEvent animEvent, InspectorProperty evtProp)
         {
             m_event = animEvent;
             m_eventProp = evtProp;
         }
 
-        public override Rect ClipRect
+        // --- ITimelineElement ---
+        public string Label => m_event.Event?.Name ?? "None";
+        public bool IsMarker => !(m_event.Event?.IsRangedEvent ?? false);
+
+        public float StartTime
         {
-            get
+            get => IsMarker ? m_event.TriggerTime : m_event.TriggerRange.x;
+            set
             {
-                if (m_event.Event.IsRangedEvent) return RangedClipRect(m_event.TriggerRange.x, m_event.TriggerRange.y);
-                return MarkerRect(m_event.TriggerTime);
-            }
-        }
-        
-        public override void DrawClipTimelineTrack()
-        {
-            if (m_event.Event.IsRangedEvent)
-            {
-                var start = m_event.TriggerRange.x;
-                var end = m_event.TriggerRange.y;
-                var center = (start + end) * 0.5f;
-                if (DrawDefaultRangedClipSlot(ClipRect, ref start, ref center, ref end))
-                {
-                    m_event.TriggerRange = new Vector2(start, end);
-                    IsDirty = true;
-                }
-            }
-            else
-            {
-                var time = m_event.TriggerTime;
-                if (DrawDefaultMarkerClipSlot(ClipRect, ref time))
-                {
-                    m_event.TriggerTime = time;
-                    IsDirty = true;
-                }
+                if (IsMarker)
+                    m_event.TriggerTime = Mathf.Clamp01(value);
+                else
+                    m_event.TriggerRange = new Vector2(Mathf.Clamp01(value), m_event.TriggerRange.y);
             }
         }
 
-        public override void DrawClipTrackContent()
+        public float EndTime
         {
-            var rect = ClipRect;
-            rect.width = Mathf.Max(100, rect.width);
-            EditorGUI.DropShadowLabel(rect, m_event.Event?.Name, SirenixGUIStyles.BoldLabelCentered);
-        }
-
-        public override void OnInspectorGUI()
-        {
-            // TODO: If event is null, instead show a selector to set the event type
-            if (m_event.Event == null)
+            get => IsMarker ? m_event.TriggerTime : m_event.TriggerRange.y;
+            set
             {
-                EditorGUILayout.HelpBox("Event is null, please select an event type [WIP]", MessageType.Error);
-                return;
+                if (!IsMarker)
+                    m_event.TriggerRange = new Vector2(m_event.TriggerRange.x, Mathf.Clamp01(value));
             }
-            
-            var eventProper = m_eventProp?.Children[1];
-            if (eventProper == null) return;
-            foreach (var child in eventProper.Children[0].Children)
-                child?.Draw();
         }
 
-        public override void Dispose() {}
+        public bool IsActive => m_event.Event != null;
+        public Texture2D Icon => null;
+        public int StableId => m_event.GetHashCode();
+
+        // REQUIRED: elements are recreated each frame
+        public override bool Equals(object obj) => obj is AnimationEventElement other && ReferenceEquals(m_event, other.m_event);
+        public override int GetHashCode() => m_event?.GetHashCode() ?? 0;
     }
-    
-    // Just a timeline to lay out events, doesnt support playback shit
+
+    // ========================================================================
+    // OdinValueDrawer using TimelineView (no playback — layout & editing only)
+    // ========================================================================
     public class AnimationEventTimeline : OdinValueDrawer<AnimationEventHolder>
     {
-        
-        private Timeline m_timeline;
-        
-        #region Context Menu Utility
-        
+        private TimelineView m_view;
+        private TimelineSelection m_selection;
+        private AnimationEventElement[] m_elements;
+        private bool m_showTimeline;
+
+        #region Event Type Discovery
+
         private struct EventTypeAndPath
         {
             public Type EventType;
             public string Path;
             public Texture2D Icon;
-            
             public string FullPath => string.IsNullOrEmpty(Path) ? EventType.Name : $"{Path}/{EventType.Name}";
-            
+
             public EventTypeAndPath(Type eventType, string path, Texture2D icon)
             {
                 EventType = eventType;
@@ -105,165 +95,182 @@ namespace FS.Animation.Editor
                 Icon = icon;
             }
         }
-        
+
         private static List<EventTypeAndPath> s_eventTypesAndPaths;
-        
+
         [InitializeOnLoadMethod]
         public static void InitAnimationEventTypesAndPath()
         {
             s_eventTypesAndPaths = new();
-
             var allEvents = ReflectionUtility.GetAllDerivedTypes<IAnimationEvent>();
-
             foreach (var eventType in allEvents)
             {
-                var eventPathAttribute = eventType.GetCustomAttribute<EventPathAttribute>();
-                string path = eventPathAttribute?.Path ?? "";
-                Texture2D icon = eventPathAttribute?.Icon ?? EditorIcons.UnityLogo;
-                
+                var attr = eventType.GetCustomAttribute<EventPathAttribute>();
+                string path = attr?.Path ?? "";
+                Texture2D icon = attr?.Icon ?? EditorIcons.UnityLogo;
                 s_eventTypesAndPaths.Add(new EventTypeAndPath(eventType, path, icon));
             }
         }
-        
-        #endregion
 
+        #endregion
 
         protected override void Initialize()
         {
-            m_timeline = new Timeline(null, OnContextClick, 1f);
-            ValidateTimelineEventData();
-            m_timeline.OnTrackRemoved += OnTrackRemoved;
+            m_view = new TimelineView();
+            m_selection = new TimelineSelection();
+
+            // Fixed duration of 1.0 since animation events use normalized [0,1] time
+            m_view.FixedDuration = 1.0f;
+
+            m_view.ElementSelected += e => { m_selection.Set(e); GUIUtility.keyboardControl = 0; };
+            m_view.ElementDrag += OnElementDrag;
+            m_view.RemoveClicked += OnRemove;
+            m_view.AddClicked += () => ShowAddEventSelector();
+
             Undo.undoRedoEvent += OnUndoRedo;
         }
 
-        private bool m_showTimeline = false;
-        
         protected override void DrawPropertyLayout(GUIContent label)
         {
-            if (m_timeline == null)
+            if (m_view == null)
             {
                 EditorGUILayout.HelpBox("Failed to initialize timeline", MessageType.Error);
                 return;
             }
-            
-            EditorGUI.BeginChangeCheck(); // Intercept this
-            FreeSkiesEditor.ToggleButton("Show Event Timeline", ref m_showTimeline);
-            if (EditorGUI.EndChangeCheck())
-                GUI.changed = false; // Prevent animation from getting marked dirty
-            
-            if (!m_showTimeline) return;
-            
-            var eventCount = ValueEntry.SmartValue.Events.Count;
-            float timelineHeight = Mathf.Clamp(eventCount * 50, 150, 300);
-            Vector2 timelineSize = new Vector2(Screen.width, timelineHeight);
-            m_timeline.IsPlaying = false;
-            m_timeline.VerticalScale = 0.75f;
-            m_timeline.DoGUI(timelineSize);
+
+            // // Toggle visibility
+            // EditorGUI.BeginChangeCheck();
+            // m_showTimeline = EditorGUILayout.Toggle("Show Event Timeline", m_showTimeline);
+            // if (EditorGUI.EndChangeCheck()) GUI.changed = false;
+            //
+            // if (!m_showTimeline) return;
+
+            RebuildElements();
+            m_selection.Validate(m_elements);
+
+            // No playback for event timelines
+            m_view.DrawTimeline(m_elements, m_selection.Selected,
+                isPlaying: false, currentPlayingTime: 0, isLooping: false, isPaused: false);
+
+            // Inspector for selected event
+            if (m_selection.Selected is AnimationEventElement selectedEvent && selectedEvent.Event.Event != null)
+            {
+                m_view.DrawInspector("Event Inspector", () =>
+                {
+                    var eventProp = selectedEvent.EventProperty?.Children[1];
+                    if (eventProp == null) return;
+                    foreach (var child in eventProp.Children[0].Children)
+                        child?.Draw();
+                });
+            }
         }
 
-        private async void ValidateTimelineEventData()
+        private void RebuildElements()
         {
-            await Awaitable.WaitForSecondsAsync(0.1f);
-            
-            var events = ValueEntry.SmartValue.Events;
-            events ??= new();
-            
+            var events = ValueEntry.SmartValue.Events ?? new List<FSAnimationEvent>();
             var evtProperties = Property.Children["Events"];
-            var data = new List<TimelineTrack>();
-            
-            for (int e = 0; e < events.Count; e++)
+
+            m_elements = new AnimationEventElement[events.Count];
+            for (int i = 0; i < events.Count; i++)
+                m_elements[i] = new AnimationEventElement(events[i], evtProperties.Children[i]);
+        }
+
+        #region Event Handlers
+
+        /// <summary>
+        /// Receives offset-corrected (newStart, newEnd) from the view. Applies with clamping.
+        /// </summary>
+        private void OnElementDrag(float newStart, float newEnd, ElementDragMode mode)
+        {
+            if (m_selection.Selected is not AnimationEventElement sel) return;
+
+            Property.RecordForUndo("Drag Animation Event");
+
+            if (sel.IsMarker)
             {
-                var animEvent = events[e];
-                var animEventProp = evtProperties.Children[e];
-                //var animEventProp = Property.Children[$"Events.${e}"];
-                //evtProperties.Children[e];
-                var track = new AnimationEventTrack(m_timeline, animEvent, animEventProp);
-                data.Add(track);
+                sel.StartTime = Mathf.Clamp01(newStart);
+            }
+            else
+            {
+                switch (mode)
+                {
+                    case ElementDragMode.Center:
+                        float duration = newEnd - newStart;
+                        newStart = Mathf.Clamp(newStart, 0, 1f - duration);
+                        sel.StartTime = newStart;
+                        sel.EndTime = newStart + duration;
+                        break;
+
+                    case ElementDragMode.StartEdge:
+                        sel.StartTime = Mathf.Clamp(newStart, 0, sel.EndTime - 0.01f);
+                        break;
+
+                    case ElementDragMode.EndEdge:
+                        sel.EndTime = Mathf.Clamp(newEnd, sel.StartTime + 0.01f, 1f);
+                        break;
+                }
             }
 
-            m_timeline.SetData(data);
-        }
-        
-        private void OnUndoRedo(in UndoRedoInfo undo)
-        {
-            ValidateTimelineEventData();
-        }
-
-        private void OnTrackRemoved(TimelineTrack removedTrack)
-        {
-            // TODO: Removing events doesnt update the parent animation
-            GUI.changed = true;
-            
-            Property.RecordForUndo("Removing Animation Event");
-            
-            var animEventTrack = (AnimationEventTrack)removedTrack;
-            var eventHolder = ValueEntry.SmartValue;
-            eventHolder.Events.Remove(animEventTrack.m_event);
-            
-            ValueEntry.SmartValue = eventHolder;
-            
             Property.MarkSerializationRootDirty();
-            
-            m_timeline.IsDirty = false;
         }
 
-        private void OnContextClick(Vector2 clickPos, Rect contentRect)
+        private void OnRemove()
         {
-            // Initialize Selector
-            var selector = new GenericSelector<Type>("", false, s_eventTypesAndPaths
-                .Select(x => new GenericSelectorItem<Type>(x.FullPath, x.EventType)));
+            if (m_selection.Selected is not AnimationEventElement eventElement) return;
 
-            //selector.CheckboxToggle = false;
+            Property.RecordForUndo("Remove Animation Event");
+            var holder = ValueEntry.SmartValue;
+            holder.Events.Remove(eventElement.Event);
+            ValueEntry.SmartValue = holder;
+            m_selection.Clear();
+            Property.MarkSerializationRootDirty();
+        }
+
+        private void ShowAddEventSelector()
+        {
+            var selector = new GenericSelector<Type>("", false,
+                s_eventTypesAndPaths.Select(x => new GenericSelectorItem<Type>(x.FullPath, x.EventType)));
+
             selector.DrawConfirmSelectionButton = false;
             selector.SelectionTree.Config.DrawScrollView = true;
             selector.EnableSingleClickToSelect();
 
             foreach (var menuItem in selector.SelectionTree.EnumerateTree())
             {
-                // Assign folder items to drop down menu itmes
                 if (menuItem.ChildMenuItems.Count > 0 && menuItem.Value == null)
-                {
                     menuItem.Icon = EditorIcons.Folder.Raw;
-                }
-                else if (menuItem.Value  != null)  
+                else if (menuItem.Value != null)
                 {
-                    // Assign event type icons
                     var eventType = (Type)menuItem.Value;
-                    var eventTypeAndPath = s_eventTypesAndPaths.FirstOrDefault(x => x.EventType == eventType);
-                    if (eventTypeAndPath.Icon != null)
-                    {
-                        menuItem.Icon = eventTypeAndPath.Icon;
-                    }
-                }  
+                    var typeAndPath = s_eventTypesAndPaths.FirstOrDefault(x => x.EventType == eventType);
+                    if (typeAndPath.Icon != null) menuItem.Icon = typeAndPath.Icon;
+                }
             }
 
-            selector.SelectionConfirmed += (selection) =>
+            selector.SelectionConfirmed += selection =>
             {
-                Type type = selection.Count() > 0 ? selection.First() : null;
-                if (type != null)// && type != this.ValueEntry.TypeOfValue)
+                var type = selection.FirstOrDefault();
+                if (type == null) return;
+
+                var newEvt = new FSAnimationEvent()
                 {
-                    var newEvt = new FSAnimationEvent()
-                    {
-                        Event = (IAnimationEvent)Activator.CreateInstance(type),
-                        TriggerTime = clickPos.x / contentRect.width,
-                        TriggerRange = new Vector2(clickPos.x / contentRect.width, clickPos.x / contentRect.width + 0.1f)
-                    };
-                    
-                    Property.RecordForUndo("Added New Event");
+                    Event = (IAnimationEvent)Activator.CreateInstance(type),
+                    TriggerTime = 0.5f,
+                    TriggerRange = new Vector2(0.4f, 0.6f)
+                };
 
-                    var eventHolder = ValueEntry.SmartValue;
-                    eventHolder.Events.Add(newEvt);
-                    ValueEntry.SmartValue = eventHolder;
-                
-                    Property.MarkSerializationRootDirty();
-                    ValidateTimelineEventData();
-                }
+                Property.RecordForUndo("Add Animation Event");
+                var holder = ValueEntry.SmartValue;
+                holder.Events.Add(newEvt);
+                ValueEntry.SmartValue = holder;
+                Property.MarkSerializationRootDirty();
             };
-            
-            var selectorRect = new Rect(clickPos.x - 125, clickPos.y - contentRect.height * m_timeline.VerticalScale/2f, 250, 100);
 
-            selector.SetSelection(this.ValueEntry.TypeOfValue);
-            selector.ShowInPopup(selectorRect, Vector2.zero);// new Vector2(rect.width, 240));
+            selector.ShowInPopup();
         }
+
+        private void OnUndoRedo(in UndoRedoInfo undo) => RebuildElements();
+
+        #endregion
     }
 }

@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using Animancer;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace FS.Animation
@@ -19,6 +17,7 @@ namespace FS.Animation
 
         private Dictionary<FSAnimationEvent, EventExecutionState> m_eventTriggerState = new();
         private GameObject m_ownerObject;
+        private bool m_isLooping;
 
         // TODO: We cant reliably know when the mecanim state enters/exits (the controller state sure, but if we've got state machines and shit we cant i dont think?)
         // public void Initialize(GameObject owner, ControllerState state)
@@ -38,12 +37,18 @@ namespace FS.Animation
         }
         //
         // private void TryTriggerEndEvents() => OnStateExit(null, default, 0);
+
+        private float GetNormalizedTime(AnimatorStateInfo stateInfo)
+        {
+            if (stateInfo.loop) return stateInfo.normalizedTime % 1f;
+            return Mathf.Clamp01(stateInfo.normalizedTime);
+        }
         
         public override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
             m_ownerObject = animator.gameObject;
-            m_prevNormTime = stateInfo.normalizedTime % 1f; // Initialize previous normalized time
-            
+            m_prevNormTime = GetNormalizedTime(stateInfo); // Initialize previous normalized time
+
             InitializeEventState();
             
             // Trigger all 'start' events
@@ -53,11 +58,12 @@ namespace FS.Animation
         private float m_prevNormTime = 0f;
         public override void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
-            float normalizedTime = stateInfo.normalizedTime % 1f;
+            float normalizedTime = GetNormalizedTime(stateInfo);
             // Reset triger states if we looped
-            if (normalizedTime < m_prevNormTime)
+            if (normalizedTime < m_prevNormTime && stateInfo.loop)
             {
-                OnStateExit(animator, stateInfo, layerIndex);
+                CompleteCurrentCycle(); // Call exit events
+                foreach (var animEvent in m_animEvents.Events) TryExecuteEvent(animEvent, 0); // call start events
             }
             else
             {
@@ -69,11 +75,23 @@ namespace FS.Animation
 
         public override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
+            CompleteCurrentCycle();
+        }
+
+        /// <summary>
+        /// Fires any remaining events at time=1 and resets state.
+        /// Used both for loop boundaries and actual state exit.
+        ///
+        /// Wanna figure out a way to call this when the MecanimAnimation fades out for any active states
+        /// </summary>
+        private void CompleteCurrentCycle()
+        {
             // NOTE: This doesn't properly trigger events if we exit the MecanimAnimation
             foreach (var animEvent in m_animEvents.Events)
             {
-                TryExecuteEvent(animEvent, 1);
-                
+                if (m_eventTriggerState[animEvent] == EventExecutionState.Executing)
+                    TryExecuteEvent(animEvent, 1);
+
                 // Clear event status as we're done and want it clean for next time
                 m_eventTriggerState[animEvent] = EventExecutionState.NotStarted;
             }
@@ -87,6 +105,7 @@ namespace FS.Animation
             float triggerTime = animEvent.IsRangedEvent ? start : animEvent.Time;
             
             float normalizedEventTime = Mathf.Repeat(normalizedTime - triggerTime, 1f);
+            float normalizedTimeDelta = normalizedEventTime;
 
             switch (eventState)
             {
@@ -100,8 +119,13 @@ namespace FS.Animation
                         }
                         else
                         {
-                            animEvent.Execute(m_ownerObject, normalizedEventTime);
-                            m_eventTriggerState[animEvent] = EventExecutionState.Completed;
+                            // Running into an issue with either triggering multiple times or triggering if fade-out duration exceeds state length so i think the repeat of time lets an event at the start play again if the fade out duration goes over the anim length
+                            // Solving it by just ensuring we're not super far off from the suggested trigger time
+                            if (normalizedTimeDelta <= 0.05f) // TODO: Framerate issues could cause skipping events, temp until a more robust solution can be figured out
+                            {
+                                animEvent.Execute(m_ownerObject, normalizedEventTime);
+                                m_eventTriggerState[animEvent] = EventExecutionState.Completed;
+                            }
                         }
                     }
                     break;

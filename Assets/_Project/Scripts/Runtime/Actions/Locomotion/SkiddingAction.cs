@@ -1,6 +1,8 @@
-﻿using Animancer;
+﻿using System.Collections;
+using Animancer;
 using FS.Animation;
 using FS.GameplayActions;
+using FS.TagSystem;
 using UnityEngine;
 
 public class SkiddingAction : GameplayAction, IActionPhysicsReciever
@@ -79,31 +81,25 @@ public class SkiddingAction : GameplayAction, IActionPhysicsReciever
         m_startSpeed = m_physics.Velocity.magnitude;
         m_isAllowedToBoostOut = m_startSpeed >= k_minSpeedForSkidLaunch;
 
-        m_animator.OnAnimationFlagBroadcast += OnAnimationFlagSet;
         CurrentSkidState = SkidState.Decelerating;
-        m_skidAnim.Play(m_animator);
+        m_skidAnim.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SkidBoost, OnSkidBoostOut);
         
         m_boostDir = -m_physics.transform.forward;
     }
 
     public override void OnEnd()
     {
-        m_animator.OnAnimationFlagBroadcast -= OnAnimationFlagSet;
-        
         if (CurrentSkidState == SkidState.Decelerating)
             // Explicitly fade out animation layer because its in a looping state
             m_skidAnim.Stop(m_animator);
     }
     
-    private void OnAnimationFlagSet(AnimationFlags flags)
+    private void OnSkidBoostOut()
     {
-        if (flags.HasFlag(AnimationFlags.SKID_END))
-        {
-            // Skid boost time
-            CurrentSkidState = SkidState.BoostingOut;
-            m_physics.Velocity = (m_boostDir) * Mathf.Max(m_startSpeed, 20f);
-            EndAction();
-        }
+        // Skid boost time
+        CurrentSkidState = SkidState.BoostingOut;
+        m_physics.Velocity = (m_boostDir) * Mathf.Max(m_startSpeed, 20f);
+        EndAction();
     }
 
     public void UpdateVelocity()

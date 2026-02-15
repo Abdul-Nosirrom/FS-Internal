@@ -42,7 +42,7 @@ namespace FS.UI
     }
     
     [Serializable]
-    public abstract class TweenAnimation<TType, TValue> : TweenAnimation
+    public abstract class TweenAnimation<TType, TValue> : TweenAnimation where TType : UnityEngine.Object
     {
         [Required] public TType Target;
         

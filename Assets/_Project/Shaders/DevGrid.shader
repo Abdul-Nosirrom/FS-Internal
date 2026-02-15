@@ -232,13 +232,14 @@ Shader "Dev/Blockout"
 
                 float3 viewDirWS = normalize(input.viewDirWS);
                 float4 shadowCoord = GetShadowCoord(input.positionWS, input.positionCS);
+                half4 shadowMask = SAMPLE_SHADOWMASK(input.lightmapUV);
                 
                 if (CanDebugOverrideOutputColor(albedo, input.positionCS, input.positionWS, normalWS, SAMPLE_GI(input.lightmapUV, input.vertexSH, normalWS)))
                     return half4(albedo, 1);
 
                 // Lighting
                 half3 color = 0;
-                Light mainLight = GetMainLightData(input.positionWS, shadowCoord);
+                Light mainLight = GetMainLight(shadowCoord, input.positionWS, shadowMask);
                 CleanupShadowAttenuation(mainLight);
 
                 float3 lighting = cel_shading(mainLight, normalWS);
@@ -254,7 +255,7 @@ Shader "Dev/Blockout"
 
                 // Additional lights
                 LIGHT_LOOP_BEGIN(input.positionWS, input.positionCS)
-                    Light light = LIGHT_LOOP_GET_LIGHT_SHADOW(input.positionWS, 1);
+                    Light light = LIGHT_LOOP_GET_LIGHT_SHADOW(input.positionWS, shadowMask);
                     CleanupShadowAttenuation(light);
                     lighting += cel_shading(light, normalWS, 0.5f, 0.1f, 0);
 
@@ -273,7 +274,7 @@ Shader "Dev/Blockout"
                 #endif
 
                 // GI
-                lighting += SampleSH(normalWS);
+                lighting += SAMPLE_GI(input.lightmapUV, input.vertexSH, normalWS);
 
                 // Strokes mask
                 half strokesSample = SAMPLE_TEXTURE2D(_StrokesTexture, sampler_StrokesTexture, input.uv).r;

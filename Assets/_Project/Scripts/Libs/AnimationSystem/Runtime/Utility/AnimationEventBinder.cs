@@ -1,5 +1,7 @@
 using System;
 using Animancer;
+using FS.TagSystem;
+using UnityEngine;
 
 namespace FS.Animation
 {
@@ -38,7 +40,7 @@ namespace FS.Animation
         /// Automatically unbinds if the animation fades out before the flag is triggered.
         /// Only invokes if the state is still active when the flag is broadcast.
         /// </summary>
-        public static void OnFlag(this AnimancerState state, FSAnimator animator, AnimationFlags flags, Action callback)
+        public static void OnFlag(this AnimancerState state, FSAnimator animator, TagSet flags, Action callback)
         {
             var binding = new FlagBinding(state, animator, flags, callback);
             binding.Subscribe();
@@ -59,11 +61,11 @@ namespace FS.Animation
         {
             private readonly AnimancerState m_state;
             private readonly FSAnimator m_animator;
-            private readonly AnimationFlags m_flags;
+            private readonly TagSet m_flags;
             private readonly Action m_callback;
             private bool m_isCleanedUp;
 
-            public FlagBinding(AnimancerState state, FSAnimator animator, AnimationFlags flags, Action callback)
+            public FlagBinding(AnimancerState state, FSAnimator animator, TagSet flags, Action callback)
             {
                 m_state = state;
                 m_animator = animator;
@@ -87,7 +89,7 @@ namespace FS.Animation
                 m_state.UnbindPlaybackEvent(Cleanup, AnimationPlaybackEventManager.Type.BeginFadeOut);
             }
 
-            private void OnFlagBroadcasted(AnimationFlags flag)
+            private void OnFlagBroadcasted(TagSet flag)
             {
                 if (!m_state.IsValid())
                 {
@@ -95,7 +97,7 @@ namespace FS.Animation
                     return;
                 }
     
-                if ((flag & m_flags) == 0) return;
+                if (!m_flags.HasAny(flag)) return;
                 if (!m_state.IsActive) return;
 
                 Cleanup();

@@ -22,7 +22,6 @@ public class ActionsAnimationSet : AnimationSet
 
     // Railgrind setup
     public MecanimAnimationAsset RailGrind;
-    public OneShotAnimation RailTrick;
 }
     
 public class PrototypeActionsAnimationController : AnimationController

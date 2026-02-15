@@ -60,6 +60,20 @@ namespace FS.Audio
             }
         }
 
+        public void SetParameter(AudioParameter audioEvtParameter)
+        {
+            if (!AudioInstance.isValid())
+            {
+                Debug.LogError("[Audio System] Audio instance is not valid. Cannot set parameters.");
+                return;
+            }
+            
+            if (AudioInstance.setParameterByName(audioEvtParameter.Name, audioEvtParameter.Value) != FMOD.RESULT.OK)
+            {
+                Debug.LogWarning($"[Audio System] Failed to set parameter '{audioEvtParameter.Name}' to {audioEvtParameter.Value} on audio instance.");
+            }
+        }
+
         public void SetParameters(List<AudioParameter> audioEvtParameters)
         {
             if (!AudioInstance.isValid())

@@ -1,10 +1,13 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using Animancer;
 using FS.Animation;
 using FS.GameplayActions;
 using FS.Math;
 using FS.MeshProcessing;
+using FS.TagSystem;
 using FS.Utility;
+using Lightbug.Utilities;
 using TimeUtils;
 using UnityEngine;
 
@@ -18,9 +21,9 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private const float k_gravityMultiplier = 15f;
     private const float k_minGrindSpeed = 12f;
-    private const float k_maxGrindSpeed = 35f;
+    private const float k_maxGrindSpeed = 50f;
     private const float k_reboundSpeed = 20f;
-    private const float k_rotationLerpSpeed = 15f;
+    private const float k_rotationLerpSpeed = 35f;
     private const float k_orientationTransitionDuration = 0.2f;
     private const float k_swapParabolicHeight = 2f;
     private const float k_zipGrindAngleThreshold = 30f;
@@ -83,7 +86,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     protected RailFeeler m_feeler;
     private SplineFollower m_grindFollower = new SplineFollower();
     private IAnimation m_railAnimation;
-    private IAnimation m_railTrickAnimation;
+    //private IAnimation m_railTrickAnimation;
     //private IAnimation m_railSwapAnimation;
     
     #endregion
@@ -135,8 +138,15 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
             var prevState = m_state;
             m_state = value;
             OnStateChanged(prevState);
+            OnRailStateChanged?.Invoke(m_state, prevState);
         }
     }
+
+    /// <summary>
+    /// Event invoked when railgrind state changes, args:
+    /// (NewState, PrevState)
+    /// </summary>
+    public Action<GrindState, GrindState> OnRailStateChanged;
 
     /// <summary>
     /// Current body orientation relative to the rail (Regular or Zipline).
@@ -150,8 +160,11 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
             m_orientationState = value;
             m_sinceOrientationChanged = 0;
             AnimRailState?.SetInteger(k_animOrientationState, (int)m_orientationState);
+            OnRailOrientationModeChanged?.Invoke();
         }
     }
+
+    public Action OnRailOrientationModeChanged;
 
     #endregion
 
@@ -171,7 +184,6 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         
         // TODO: Uncomment when animation set is available
         m_railAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailGrind;
-        m_railTrickAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailTrick;
         //m_railSwapAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>()?.RailSwap;
     }
 
@@ -231,8 +243,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     public void OnUpdate()
     {
-        if (TryHandleWallCollision()) return;
         if (State == GrindState.Rebound) return;
+        if (TryHandleWallCollision()) return;
 
         UpdateLeanAmount();
         TryRailTrick();
@@ -247,12 +259,14 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     /// <returns>True if update should be halted due to collision handling.</returns>
     private bool TryHandleWallCollision()
     {
-        if (!m_physics.WallContactCollision.gameObject) return false;
         if (State == GrindState.Rebound) return false;
 
         // Check if we're moving into the wall
-        bool bMovingIntoWall = Vector3.Dot(m_physics.WallContactCollision.normal, m_physics.transform.forward) < 0;
+        if (!Physics.SphereCast(m_physics.CenterPosition, m_physics.CapsuleRadius * 1.1f, m_physics.VelocityDirection,
+                out m_wallReboundHit, m_physics.CapsuleRadius * 3f, m_physics.CollidableLayers)) return false;
+        bool bMovingIntoWall = Vector3.Dot(m_wallReboundHit.normal, m_physics.transform.forward) < 0;
         if (!bMovingIntoWall) return false;
+        Debug.LogWarning($"Wall Hit Dist: {m_wallReboundHit.distance}");
 
         if (State == GrindState.Default)
         {
@@ -416,10 +430,11 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private IEnumerator PerformSimpleRailTrick()
     {
+        State = GrindState.Trick;
         AnimRailState?.CrossFade("Rail Trick", 0.2f, 0, 0);
         //m_railTrickAnimation.Play(m_animator);
         //yield return m_railTrickAnimation.WaitForFadeOut(m_animator);
-        yield return AnimRailState?.WaitForFlag(m_animator, AnimationFlags.SKID_END);
+        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation_.RailGrind_.TrickEnd);
         //yield return m_railTrickAnimation.WaitForTime(m_animator, 0.7f);
         m_grindFollower.m_speed += 10 * m_grindFollower.DirectionSign;
         if (State == GrindState.Trick) State = GrindState.Default;
@@ -482,6 +497,8 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     #region Rebound
 
+    [RuntimeData] private RaycastHit m_wallReboundHit;
+    
     private IEnumerator PerformRebound()
     {
         //AnimRailState?.SetTrigger(k_animReboundTrigger);
@@ -492,20 +509,30 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         //     m_grindFollower.m_speed = k_reboundSpeed * -originalDirectionSign;
         //     State = GrindState.Default;
         // });
+        AnimRailState?.CrossFade("Rebound", 0, 0);
 
         // Rotate 180 degrees to face away from wall
         m_physics.Rotation = Quaternion.AngleAxis(180f, m_physics.transform.up) * m_physics.Rotation;
         m_physics.SnapVisualRotation();
+
         
         // Align position to wall
-        var contactPoint = m_physics.WallContactCollision.point;
-        var contactNormal = m_grindFollower.Direction;
-        var distToContact = -(contactPoint - m_physics.Position).Dot(contactNormal);
-        m_physics.Position += contactNormal * (distToContact + m_physics.CapsuleRadius * 1.1f);
+        // m_wallReboundHit.point
+        // var contactPoint = m_physics.WallContactCollision.point;
+        // var contactNormal = m_grindFollower.Direction;
+        // var distToContact = (contactPoint - m_physics.Position).Dot(contactNormal);
+        // //m_physics.Position -= contactNormal * (distToContact + 3 * m_physics.CapsuleRadius * 1.1f);
+        // float offWallDistance = distToContact + 2 * m_physics.CapsuleRadius;
+        // m_physics.Position -= contactNormal * offWallDistance;
+        // m_grindFollower.Distance -= m_grindFollower.DirectionSign * offWallDistance; // Keep this synced up
 
         // Pause movement during wind-up
         var originalDirectionSign = m_grindFollower.DirectionSign;
-        yield return Yields.WaitForSeconds(0.5f);
+        m_grindFollower.m_speed = 0f;
+        m_physics.Velocity = Vector3.zero;
+        
+        // Wait for rebound flag
+        yield return AnimRailState?.WaitForFlag(m_animator, Tag.Animation_.RailGrind_.Rebound);
 
         // Launch in reverse direction
         m_grindFollower.m_speed = k_reboundSpeed * -originalDirectionSign;
@@ -518,7 +545,11 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     public void UpdateVelocity()
     {
-        if (State == GrindState.Rebound) return;
+        if (State == GrindState.Rebound)
+        {
+            m_physics.Velocity = Vector3.zero;
+            return;
+        }
 
         ApplyGravityToGrindSpeed();
         m_physics.Velocity = m_grindFollower.Velocity;
@@ -570,7 +601,6 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
                 break;
             case GrindState.Rebound:
                 // Play wall eject animation
-                AnimRailState?.CrossFade("Rebound", 0, 0, 0.2f);
                 StartCoroutine(PerformRebound());
                 break;
             case GrindState.Swap:

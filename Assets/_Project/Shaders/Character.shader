@@ -382,6 +382,79 @@ Shader "FreeSkies/Character"
             ENDHLSL
         }
         // =====================================================================
+        // AURA EFFECT
+        // =====================================================================
+//        Pass
+//        {
+//            Name "Aura"
+//            Tags { "LightMode" = "Aura" }
+//            ZWrite Off
+//            ZTest LEqual
+//            Cull Front
+//            Blend SrcAlpha OneMinusSrcAlpha
+//            
+//            HLSLPROGRAM
+//            
+//            #define VERTEX_DISPLACEMENT(posOS, input) AuraVertex(posOS, input)
+//            #define NEEDS_NORMAL;
+//            
+////            #include_with_pragmas "Library/Core/Passes/ForwardVertex.hlsl"
+//            #include_with_pragmas "Library/Keywords/DOTSInstancing.hlsl"
+//            #include "Library/Core/StructBuilder.hlsl"
+//            #include "Library/Core/Hooks.hlsl"
+//
+//            #include "Library/Noise/Noise3D.hlsl"
+//            #pragma vertex Vert
+//            #pragma fragment Frag
+//            
+//            void AuraVertex(inout float4 posOS, Attributes input)
+//            {
+//                float3 noisePos = posOS + float3(0, 1, 0) * _Time.y * 0.5;
+//                float noiseSample = fbm_perlin_3d(noisePos, 5);
+//                noiseSample = lerp(0.4, 0.6, noiseSample);
+//                // inflate a bit first
+//                posOS.xyz += normalize(input.normalOS) * 0.05f;
+//                posOS.xyz += float3(0,1,0) * noiseSample * 0.3f;
+//            }
+//
+//            Interpolators Vert(Attributes input)
+//            {
+//                Interpolators output = INIT_INTERPOLATORS;
+//
+//                UNITY_SETUP_INSTANCE_ID(input);
+//                UNITY_TRANSFER_INSTANCE_ID(input, output);
+//                
+//                VERTEX_DISPLACEMENT(input.positionOS, input);
+//                
+//                output.positionCS = TransformObjectToHClip(input.positionOS);
+//                output.positionCS.z -= HALF_EPS * 12;
+//                output.uv = input.uv;
+//                
+//                TRANSFER_EXTRA(output, input);
+//            
+//            #ifdef NEEDS_NORMAL
+//                output.normalWS = TransformObjectToWorldNormal(input.normalOS, true);
+//            #endif
+//
+//                return output;
+//            }
+//                        
+//            float4 Frag(Interpolators input) : SV_TARGET0
+//            {
+//                float3 posOS = input.positionOS;
+//                float noiseSample = worley_3d(posOS, 16);
+//                float3 color = lerp(float3(0.2, 0, 0.4), float3(0.6, 0, 0.4), noiseSample);
+//                float alpha = fbm_perlin_3d_01(posOS, 32);
+//                
+//                float yGrad = smoothstep(0.2f, 0.3f, posOS.y);
+//                
+//                //return yGrad;
+//                return float4(color * 8, alpha * yGrad);
+//            }
+//            
+//            ENDHLSL
+//        }
+        // =====================================================================
         // INVERSE HULL OUTLINES
         // =====================================================================
         Pass
@@ -398,7 +471,6 @@ Shader "FreeSkies/Character"
         }
         // =====================================================================
         // SHADOW CASTER
-        // =====================================================================
         Pass
         {
             Name "ShadowCaster"

@@ -62,12 +62,16 @@ public class TubeRenderer : MonoBehaviour
     private void OnEnable()
     {
         m_cumilativeDistance = 0;
+#if UNITY_EDITOR
         EditorApplication.update += LateUpdate;
+#endif
     }
 
     private void OnDisable()
     {
+#if UNITY_EDITOR        
         EditorApplication.update -= LateUpdate;
+#endif        
     }
 
     private void OnValidate()

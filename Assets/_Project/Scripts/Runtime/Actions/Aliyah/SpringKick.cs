@@ -8,13 +8,14 @@ using FS.GameplayActions;
 using FS.Math;
 using FS.Player;
 using FS.RuntimeDebug;
+using FS.TagSystem;
 using Lightbug.Utilities;
 using PrimeTween;
 using TimeUtils;
 using UnityEngine;
 
 [Serializable]
-public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEvaluator, IActionAnimationFlagReciever, IDebugProvider
+public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEvaluator, IDebugProvider
 {
     #region Constants
     
@@ -22,14 +23,12 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     private const float KICK_BUFFER_TIME = 0.1f;
     //private const float WALL_LOOKAHEAD_TIME = 0.2f; TODO: Breaks when chaining wall kicks
     private float WALL_LOOKAHEAD_TIME => Time.deltaTime;
-    private const float WALL_HOLD_DURATION = 0.35f;
     private const float WALL_EJECT_DURATION = 0.5f;
     private const float DASH_GRAVITY_MULTIPLIER = 15f;
     private const float DASH_STEERING_RATE = 3f;
     private const float WALL_ROTATION_SPEED = 10f;
     private const float HOMING_IMPACT_ANIM_THRESHOLD = 0.2f;
     private const float HOMING_ARRIVAL_TIME_THRESHOLD = 0.01f;
-    private const float ENEMY_STEP_DURATION = 0.35f;
     
     #endregion
 
@@ -85,12 +84,15 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
         private set
         {
             if (m_state == value) return;
-            
+
+            var prevState = m_state;
             m_state = value;
             if (m_state == State.WallHold) m_numKicksPerformed++;
             m_sinceStateChange = 0;
             m_positionOnStateChange = m_physics.transform.position;
             m_velocityOnStateChange = m_physics.Velocity;
+            
+            OnStateChange(prevState, m_state);
         }
     }
     
@@ -127,9 +129,9 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
         AnimationReference.Get<ActionsAnimationSet>(nameof(ActionsAnimationSet.SpringKickWallEject));
     private readonly AnimationReference m_anim_homingImpact = 
         AnimationReference.Get<ActionsAnimationSet>(nameof(ActionsAnimationSet.HomingAttackImpact));
-    private readonly AnimationReference m_anim_homingEnemyBounce = 
-        AnimationReference.Get<ActionsAnimationSet>(nameof(ActionsAnimationSet.HomingAttackEnemyBounce));
-    private readonly AnimationReference m_anim_fronttuck = 
+    private FSAnimation m_anim_homingEnemyBounce => // TODO: Limitations of AnimationReference usage, ideally would like to solve it (GetTransition has no implementation, cant use GetTimeForFlag, etc...) 
+        m_animator.GetAnimationSet<ActionsAnimationSet>().HomingAttackEnemyBounce;
+    private readonly AnimationReference m_anim_frontTuck = 
         AnimationReference.Get<ActionsAnimationSet>(nameof(ActionsAnimationSet.FrontFlip));
     
     #endregion
@@ -186,13 +188,34 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
                 m_numKicksPerformed = m_wallKickCount; // Whiffed wall-kick - prevent further kicks
 
                 if ((m_interruptorAction == null || m_interruptorAction is AcidDropAction) && m_physics.State == PhysicsState.Air) 
-                    m_anim_fronttuck.Play(m_animator);
+                    m_anim_frontTuck.Play(m_animator);
                 break;
                 
             case State.HomingAttack:
             case State.EnemyStep:
                 ApplyHomingAttackDamage();
                 break;
+        }
+    }
+
+    private void OnStateChange(State prevState, State newState)
+    {
+        switch (newState)
+        {
+            case State.Dash:
+                break;
+            case State.WallHold:
+                m_anim_wallEject.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SpringKick_.WallEject, ExecuteWallEject);
+                break;
+            case State.WallEject:
+                break;
+            case State.HomingAttack:
+                break;
+            case State.EnemyStep:
+                m_anim_homingEnemyBounce.Play(m_animator).OnFlag(m_animator, Tag.Animation_.SpringKick_.EnemyBounce, CompleteEnemyStep);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(newState), newState, null);
         }
     }
     
@@ -326,16 +349,8 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     
     private void UpdateWallHoldState()
     {
-        var animState = m_anim_wallEject.Play(m_animator);
         m_physics.Velocity = Vector3.zero;
         AlignToWall();
-        
-
-        //if (m_sinceStateChange > WALL_HOLD_DURATION + WALL)
-        if (animState.Time >= WALL_HOLD_DURATION + 0.2f)//WALL_LOOKAHEAD_TIME)
-        {
-            ExecuteWallEject();
-        }
     }
     
     private void AlignToWall()
@@ -461,16 +476,10 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     {
         m_physics.Velocity = Vector3.zero;
         
-        var state = m_anim_homingEnemyBounce.Play(m_animator);
-
-        float alpha = Easing.Evaluate(state.Time / ENEMY_STEP_DURATION, Ease.OutQuad);
+        AnimationFlag.TryGetFlagTime(m_anim_homingEnemyBounce, Tag.Animation_.SpringKick_.EnemyBounce, out var bounceTime);
+        float alpha = Easing.Evaluate(m_sinceStateChange / bounceTime, Ease.OutQuad);
         var targetPos = Vector3.Lerp(m_positionOnStateChange, m_homingAttackTarget.Target.transform.position, alpha);
         m_physics.SetPosition(targetPos);
-        
-        if (alpha >= 1f)
-        {
-            CompleteEnemyStep();
-        }
     }
     
     private void CompleteEnemyStep()
@@ -595,16 +604,6 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
             out var failReasons);
         
         CombatService.Instance.ClearHitList(m_physics.gameObject);
-    }
-    
-    #endregion
-
-    #region Interface Implementations
-    
-    public void OnAnimationFlag(AnimationFlags flags)
-    {
-        // Reserved for animation-driven state transitions
-        // Example: if (flags == AnimationFlags.SPRING_KICK_WALL_EJECT) CurrentState = State.WallEject;
     }
     
     #endregion

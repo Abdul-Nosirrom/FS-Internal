@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Animancer;
 using FS.GameplayActions;
+using FS.TagSystem;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,7 +14,7 @@ namespace FS.Animation
 {
     public interface IActionAnimationFlagReciever
     {
-        public void OnAnimationFlag(AnimationFlags flags);
+        public void OnAnimationFlag(TagSet flags);
     }
     
     /// <summary>
@@ -162,8 +163,8 @@ namespace FS.Animation
             m_actionController = GetComponentInParent<ActionController>();
         }
 
-        public event Action<AnimationFlags> OnAnimationFlagBroadcast;
-        public void BroadcastAnimationFlag(AnimationFlags flags)
+        public event Action<TagSet> OnAnimationFlagBroadcast;
+        public void BroadcastAnimationFlag(TagSet flags)
         {
             OnAnimationFlagBroadcast?.Invoke(flags);
             if (m_actionController)
