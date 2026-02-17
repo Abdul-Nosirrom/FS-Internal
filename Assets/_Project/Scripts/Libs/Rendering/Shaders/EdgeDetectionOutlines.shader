@@ -112,7 +112,7 @@
                 float fogFar = 150;
                 float fogFactor = saturate((eyeDepth - fogNear) / (fogFar - fogNear));
                 // inverse square fog
-                fogFactor = pow(fogFactor, 2);
+                fogFactor = pow(fogFactor, 2) * 0;
                 col = lerp(col, fogColor, _fogFactor * fogFactor);
                 return RobertsCross(uv) * col;
                 

@@ -4,7 +4,8 @@
     {
         [Header(Sky Color)]
         _SkyGradient("Sky Gradient", 2D) = "white" {}
-        
+        [HDR] _SkyTint("Sky Tint", Color) = (1, 1, 1, 1)
+
         [Header(Stars)]
         _StarNoise("Star Noise", 2D) = "white" {}
         [HDR] _StarColor("Star Color", Color) = (1, 1, 1, 1)
@@ -12,6 +13,9 @@
         [Header(Clouds)]
         _Clouds("Clouds", 2D) = "white" {}
         _CloudsSpeed("Clouds Speed", Color) = (0.1, 0.6, 0, 0) // X: horizontal speed, Y: vertical speed
+        _CloudStepThreshold("Cloud Step Threshold", Range(0,1)) = 0.5
+        _CloudStepRange("Cloud Step Range", Range(0,0.5)) = 0.5
+        [HDR] _CloudColor("Cloud Color", Color) = (1,1,1,1)
         
         [Header(Sun)]
         _SunSize("Sun Size", Range(0, 1)) = 0.02
@@ -51,11 +55,15 @@
 
             CBUFFER_START(UnityPerMaterial)
 
+            float3 _SkyTint;
             float4 _SkyGradient_ST;
             float4 _StarNoise_ST;
             float4 _Clouds_ST;
 
             float2 _CloudsSpeed;
+            float _CloudStepThreshold;
+            float _CloudStepRange;
+            float4 _CloudColor;
             
             float4 _StarColor;
             float _SunSize;
@@ -106,18 +114,23 @@
                 return cloudsColor;
             }
             
+            #include "Library/Noise/Noise2D.hlsl"
+            
             float3 frag(v2f i) : SV_Target
             {
                 float2 starUV = TRANSFORM_TEX(XZProjection(i.viewDir), _StarNoise);
                 float starNoise = SAMPLE_TEXTURE2D(_StarNoise, sampler_StarNoise, starUV).r;
+                //starNoise = value_noise_2d(XZProjection(i.viewDir), 64);
+                //starNoise = step(0.9, starNoise);
                 float3 starVal =  smoothstep(0.4, 1, starNoise) * _StarColor * saturate(i.viewDir.y);
                 
                 float2 cloudsUV = TRANSFORM_TEX(XZProjection(i.viewDir), _Clouds);
                 float3 cloudsColor = SampleClouds(_Clouds, sampler_Clouds, cloudsUV, i.viewDir, _CloudsSpeed.xy);
+                cloudsColor = _CloudColor.a * _CloudColor.rgb * smoothstep(_CloudStepThreshold - _CloudStepRange, _CloudStepThreshold + _CloudStepRange, cloudsColor);
 
                 float2 uv = ViewToSphericalNorm(i.viewDir);
                 uv.y = 1 - uv.y; // Invert Y to match texture coordinates
-                float3 color = SAMPLE_TEXTURE2D(_SkyGradient, sampler_SkyGradient, uv.y) + starVal + cloudsColor;
+                float3 color = _SkyTint * SAMPLE_TEXTURE2D(_SkyGradient, sampler_SkyGradient, uv.y) + starVal + cloudsColor;
 
                 //color *= InterleavedGradientNoise(uv, 0);
 

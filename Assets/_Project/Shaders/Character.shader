@@ -339,7 +339,7 @@ Shader "FreeSkies/Character"
                 lightMask = saturate(lightMask);
 
                 // Apply shadow tint pre-ambient by color selection via lightmask
-                lighting = lerp(shadowTint, lighting, lightMask);
+                lighting = lerp(shadowTint*0.35f, lighting, lightMask);
 
                 // Ambient, fixed normal direction to flatten it
                 lighting += SampleSH(float3(0,1,1));

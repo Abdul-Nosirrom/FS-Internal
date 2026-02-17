@@ -148,6 +148,8 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     public override void OnInitialize(GameObject owner)
     {
         m_physics.OnPhysicsStateChanged += OnPhysicsStateChanged;
+        //gameObject.GetTags().A
+        //gameObject.GetTags().OnTagAdded += OnTagAdded; // add event bindings - if possible, bind to specific tag modifications?
     }
 
     public override void OnStart()

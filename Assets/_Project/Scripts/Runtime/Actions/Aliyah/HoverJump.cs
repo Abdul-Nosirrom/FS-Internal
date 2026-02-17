@@ -3,6 +3,7 @@ using FS.Animation;
 using FS.GameplayActions;
 using FS.Math;
 using FS.Player;
+using FS.TagSystem;
 using PrimeTween;
 using TimeUtils;
 using UnityEngine;
@@ -12,8 +13,6 @@ public class HoverJump : GameplayAction, IActionPhysicsReciever
 {
     public override ActionChannel Channels => ActionChannel.PhysicsVertical;
     
-    [RuntimeData] private bool m_jumpReset = true;
-
     // These are multiples of gravity
     [Tooltip("How much vertical boost to give on hover jump? Final speed will be max(0, startVertical) + verticalBoost * (1-pctTimeSpentFalling)")]
     [SerializeField] private float m_verticalBoost = 6f;
@@ -40,34 +39,36 @@ public class HoverJump : GameplayAction, IActionPhysicsReciever
     
     private IAnimation m_hoverJumpAnimation;
 
-    
+    public static Tag ActivationTag => Tag.Action.Activation.HoverJump;
 
     public override void OnInitialize(GameObject owner)
     {
+        gameObject.GetTags().Add(ActivationTag);
         m_physics.OnPhysicsStateChanged += TryResetJumpCounter;
         m_hoverJumpAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>().WhipArmHoverJump;
     }
 
     private void TryResetJumpCounter(PhysicsState prevState , PhysicsState newState)
     {
-        if (newState == PhysicsState.Air) m_jumpReset = true;
+        if (newState == PhysicsState.Air) gameObject.GetTags().Add(ActivationTag); // Reset it
     }
     
     protected override bool StartCondition()
     {
-        return m_input.GetButton(GameInput.Jump) && m_jumpReset && m_physics.State == PhysicsState.Air;
+        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && gameObject.HasTag(ActivationTag);
     }
 
     private float m_timeStoppedFalling = 0f;
     
     public override void OnStart()
     {
+        gameObject.GetTags().Remove(ActivationTag); // Consume it
+
         m_hoverJumpAnimation.Play(m_animator);
         
         m_startVerticalSpeed = m_physics.VerticalSpeed;
         m_input.ConsumeInput(GameInput.Jump);
         m_hasInputReleased = false;
-        m_jumpReset = false;
         m_timeStoppedFalling = 0f;
         
         // Slight speed boost in movement direction for momentum

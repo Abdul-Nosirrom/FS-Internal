@@ -7,6 +7,50 @@ namespace FS.TagSystem
 {
     public partial struct Tag
     {
+        /// <summary>Tags relating to gameplay actions</summary>
+        public static readonly Action_ Action = new();
+
+        /// <summary>Tags relating to gameplay actions</summary>
+        public class Action_
+        {
+            public const string Path = "Action";
+            private static readonly Tag _internal = new("Action");
+            public static implicit operator Tag(Action_ _) => _internal;
+
+            /// <summary>Tags used for limiting activation of certain actions</summary>
+            public readonly Activation_ Activation = new();
+
+            /// <summary>Tags used for limiting activation of certain actions</summary>
+            public class Activation_
+            {
+                public const string Path = "Action.Activation";
+                private static readonly Tag _internal = new("Action.Activation");
+                public static implicit operator Tag(Activation_ _) => _internal;
+
+                /// <summary>Spring Legs Double Jump</summary>
+                private static readonly Tag _internal_SpringKick = new("Action.Activation.SpringKick");
+                public Tag SpringKick => _internal_SpringKick;
+                public const string SpringKick_Path = "Action.Activation.SpringKick";
+
+                /// <summary>Finger Gun Double Jump</summary>
+                private static readonly Tag _internal_FingerGunBlast = new("Action.Activation.FingerGunBlast");
+                public Tag FingerGunBlast => _internal_FingerGunBlast;
+                public const string FingerGunBlast_Path = "Action.Activation.FingerGunBlast";
+
+                /// <summary>Boxing Gloves Double Jump</summary>
+                private static readonly Tag _internal_MeteorDash = new("Action.Activation.MeteorDash");
+                public Tag MeteorDash => _internal_MeteorDash;
+                public const string MeteorDash_Path = "Action.Activation.MeteorDash";
+
+                /// <summary>Whip Arm Double Jump</summary>
+                private static readonly Tag _internal_HoverJump = new("Action.Activation.HoverJump");
+                public Tag HoverJump => _internal_HoverJump;
+                public const string HoverJump_Path = "Action.Activation.HoverJump";
+
+            }
+
+        }
+
         /// <summary>Tags broadcast by animation events for gameplay timing</summary>
         public static readonly Animation_ Animation = new();
 

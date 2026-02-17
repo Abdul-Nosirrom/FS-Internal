@@ -155,7 +155,7 @@ namespace FS.TagSystem.Editor
 
             foreach (var filterReq in m_tagFilter)
             {
-                if (node.FullPath.Contains(filterReq)) return true;
+                if (Tag.MatchesSegment(node.FullPath, filterReq)) return true;
             }
             
             return false;

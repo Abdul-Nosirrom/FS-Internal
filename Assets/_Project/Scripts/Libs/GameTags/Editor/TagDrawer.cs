@@ -41,7 +41,7 @@ namespace FS.TagSystem.Editor
             // Show warning if the tag isn't found in any definition file
             if (tag.IsValid && !bIsValid)
             {
-                SirenixEditorGUI.WarningMessageBox($"Tag \"{tag.Value}\" not found in any .gameplayTags definition file.");
+                SirenixEditorGUI.WarningMessageBox($"Tag \"{tag.Value}\" not found in any .gameTags definition file.");
             }
         }
 

@@ -5,6 +5,7 @@ using FS.CameraSystem;
 using FS.GameplayActions;
 using FS.Math;
 using FS.Player;
+using FS.TagSystem;
 using TimeUtils;
 using UnityEngine;
 
@@ -16,33 +17,37 @@ public class BlastJump : GameplayAction, IActionPhysicsReciever, IActionGizmoRec
     [SerializeField] private float m_blastLateralDistance = 1f;
     [SerializeField] private float m_blastApex = 2f;
     [SerializeField] private float m_launchGravity = 30f;
-
-    [RuntimeData] private bool m_jumpReset = true;
     
     [RuntimeData] private float m_calculatedLaunchTime;
     
     private IAnimation m_blastJumpAnimation;
 
+    public static Tag ActivationTag => Tag.Action.Activation.FingerGunBlast;
     
     public override void OnInitialize(GameObject owner)
     {
+        gameObject.GetTags().Add(ActivationTag);
+        
         m_physics.OnPhysicsStateChanged += TryResetJumpCounter;
         m_blastJumpAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>().FingerGunBlastJump;
     }
 
     private void TryResetJumpCounter(PhysicsState prevState , PhysicsState newState)
     {
-        if (newState == PhysicsState.Air) m_jumpReset = true;
+        if (newState == PhysicsState.Air) gameObject.GetTags().Add(ActivationTag); // Reset
         else m_blastJumpAnimation.Stop(m_animator);
     }
 
     protected override bool StartCondition()
     {
-        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && m_jumpReset;
+        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && gameObject.HasTag(ActivationTag);
     }
 
     public override void OnStart()
     {
+        // Consume double jump tag
+        gameObject.GetTags().Remove(ActivationTag);
+        
         // Play animation
         m_blastJumpAnimation.Play(m_animator);
         
@@ -55,7 +60,6 @@ public class BlastJump : GameplayAction, IActionPhysicsReciever, IActionGizmoRec
             m_actionController.ActiveActions[ActionChannel.PhysicsConstraint].TryEndAction(this);
         }
         
-        m_jumpReset = false;
         m_input.ConsumeInput(GameInput.Jump);
         
         var forwardDir = m_physics.MoveInput().ProjectOnPlane(m_physics.UpDirection);

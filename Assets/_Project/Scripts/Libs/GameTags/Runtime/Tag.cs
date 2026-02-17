@@ -54,7 +54,7 @@ namespace FS.TagSystem
         /// "Animation.SkidExtra".MatchesTag("Skid")           == false  (no dot boundary)
         /// </code>
         /// </summary>
-        public bool MatchesTag(Tag other)
+        public bool MatchesHierarchy(Tag other)
         {
             if (!other.IsValid) return false;
 
@@ -106,8 +106,8 @@ namespace FS.TagSystem
         #region Equality
 
         public bool Equals(Tag other) =>
-            ReferenceEquals(m_value, other.m_value) || Value == other.Value;
-
+            ReferenceEquals(m_value, other.m_value) || (m_value != null && other.m_value != null && string.Equals(m_value, other.m_value, StringComparison.Ordinal));
+        
         public override bool Equals(object obj) => obj is Tag other && Equals(other);
         public override int GetHashCode() => Value.GetHashCode();
         public override string ToString() => Value;
@@ -133,6 +133,24 @@ namespace FS.TagSystem
         }
         
         #endregion
+        
+        /// <summary>
+        /// Utility function to test string tags
+        /// </summary>
+        public static bool MatchesSegment(string fullPath, string segment)
+        {
+            int index = fullPath.IndexOf(segment, StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                bool leftOk  = index == 0 || fullPath[index - 1] == '.';
+                int end      = index + segment.Length;
+                bool rightOk = end == fullPath.Length || fullPath[end] == '.';
+
+                if (leftOk && rightOk) return true;
+                index = fullPath.IndexOf(segment, index + 1, StringComparison.Ordinal);
+            }
+            return false;
+        }
     }
 
     /// <summary>

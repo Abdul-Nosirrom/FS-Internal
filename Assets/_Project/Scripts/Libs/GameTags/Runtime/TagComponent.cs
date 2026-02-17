@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace FS.TagSystem
@@ -43,31 +44,43 @@ namespace FS.TagSystem
     /// </summary>
     public static class TagExtensions
     {
+        private static readonly ConditionalWeakTable<GameObject, ITagProvider> s_cache = new();
+
+        public static ITagProvider GetTagProvider(this GameObject go)
+        {
+            if (!s_cache.TryGetValue(go, out var provider))
+            {
+                provider = go.GetComponentInChildren<ITagProvider>() ?? go.GetComponentInParent<ITagProvider>();
+                s_cache.Add(go, provider);
+            }
+            return provider;
+        }
+        
         /// <summary>Returns true if the GameObject has the exact tag.</summary>
         public static bool HasTag(this GameObject go, Tag tag)
         {
-            var comp = go.GetComponent<ITagProvider>();
+            var comp = go.GetTagProvider();
             return comp != null && comp.Tags.Has(tag);
         }
 
         /// <summary>Returns true if the GameObject has any tag under the given hierarchy.</summary>
         public static bool HasAnyTag(this GameObject go, Tag parent)
         {
-            var comp = go.GetComponent<ITagProvider>();
+            var comp = go.GetTagProvider();
             return comp != null && comp.Tags.HasAny(parent);
         }
 
         /// <summary>Returns the tag set, or null if no <see cref="TagComponent"/> is present.</summary>
         public static TagSet GetTags(this GameObject go)
         {
-            var comp = go.GetComponent<ITagProvider>();
+            var comp = go.GetTagProvider();
             return comp?.Tags;
         }
 
         /// <summary>Evaluates a tag query against the GameObject's tags. Returns false if no component present.</summary>
         public static bool MatchesTagQuery(this GameObject go, TagQuery query)
         {
-            var comp = go.GetComponent<ITagProvider>();
+            var comp = go.GetTagProvider();
             return comp != null && comp.Tags.Matches(query);
         }
     }

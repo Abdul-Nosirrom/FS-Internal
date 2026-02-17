@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Animancer.Editor;
+using FluffyUnderware.Curvy;
 using FS.Rendering;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -19,8 +20,23 @@ public class BoneChainInstancedRenderer : MonoBehaviour, ICommandBufferPass
     public Material m_material;
     public Mesh m_mesh;
 
-    void OnEnable() => this.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingOpaques);
-    void OnDisable() => this.RemoveGlobalCommandBuffer();
+    private CurvySpline m_splineGuide;
+
+    void OnEnable()
+    {
+        m_splineGuide = CurvySpline.Create();
+        m_splineGuide.transform.SetParent(transform);
+        m_splineGuide.Clear(false);
+        m_splineGuide.SetControlPointCount(m_boneChain.Count);
+        this.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingOpaques);
+    }
+
+    void OnDisable()
+    {
+        DestroyImmediate(m_splineGuide);
+        m_splineGuide = null;
+        this.RemoveGlobalCommandBuffer();
+    }
 
     public void OnCameraRender(CommandBuffer cmd)
     {
@@ -52,56 +68,44 @@ public class BoneChainInstancedRenderer : MonoBehaviour, ICommandBufferPass
         if (m_boneChain.Count <= 1) return;
         if (m_mesh == null || m_material == null) return;
         
+        SyncSplineGuide();
         var matrices = ComputeInstanceTransforms();
         if (matrices.Count == 0) return;
         Graphics.RenderMeshInstanced(RenderParams, m_mesh, 0, matrices);
     }
 
+    private void SyncSplineGuide()
+    {
+        Debug.Log($"Length mismatch? {m_boneChain.Count} and {m_splineGuide.Count}");
+        for (int b = 0; b < m_boneChain.Count; b++)
+        {
+            var boneTransform  = m_boneChain[b];
+            var splineCP = m_splineGuide.ControlPointsList[b];
+
+            splineCP.SetPosition(boneTransform.position);
+            splineCP.SetRotation(boneTransform.rotation);
+        }
+    }
+
     private List<Matrix4x4> ComputeInstanceTransforms()
     {
-        float prevDistWalked = 0;
-        float distWalked = 0;
-        float distSinceLastInstance = 0;
-        
         List<Matrix4x4> matrices = new List<Matrix4x4>();
-        
-        // Define these in upper scope as we want to continue the interpolation as we go into the next pair of bones
-        Vector3 pos;
-        Quaternion rot;
-        Vector3 scale; 
-        
-        // Walk bone chain - subdivide pairs along linear lines to create matrix bone chain
-        for (int i = 0; i < m_boneChain.Count - 1; i++)
-        {
-            var curTransform = m_boneChain[i];
-            var nextTransform = m_boneChain[i + 1];
-            
-            // Easy skip if distance between the two is less than spacing
-            var dist = Vector3.Distance(curTransform.position, nextTransform.position);
-            // if (dist + distSinceLastInstance < m_instanceSpacing)
-            // {
-            //     distSinceLastInstance += dist;
-            //     prevDistWalked = distWalked;
-            //     distWalked += dist;
-            //     continue;
-            // }
-            
-            // Subdivide walk by instanceSpacing (we should carry over dist since last instance, utilizing distance of last point to nextTransform)
-            int numSteps = Mathf.FloorToInt(dist / m_instanceSpacing);
-            
-            for (int s = 0; s < numSteps; s++)
-            {
-                float t = s / (float)numSteps;
 
-                // Testin this
-                var perInstOffset = (matrices.Count % 2) == 0 ? Quaternion.identity : m_perInstanceRotOffset;
-                
-                pos = Vector3.Lerp(curTransform.position, nextTransform.position, t);
-                rot = Quaternion.Slerp(curTransform.rotation, nextTransform.rotation, t) * (m_localRotation * perInstOffset);
-                scale = m_scale;
-                
-                matrices.Add(Matrix4x4.TRS(pos, rot, scale));
-            }
+        float splineDist = m_splineGuide.TFToDistance(1);
+        // Limit to 250 instances
+        if (m_instanceSpacing <= 0) return matrices;
+        if (splineDist / m_instanceSpacing > 250) return matrices;
+        
+        float currentDist = 0f;
+        int b = 0;
+        while (currentDist <= splineDist)
+        {
+            Quaternion perInstVariation = b % 2 == 0 ? m_perInstanceRotOffset : Quaternion.identity;
+            b++;
+            float tf = m_splineGuide.DistanceToTF(currentDist);
+            m_splineGuide.InterpolateAndGetTangentFast(tf, out var pos, out var tangent, Space.World);
+            matrices.Add(Matrix4x4.TRS(pos, Quaternion.LookRotation(tangent) * perInstVariation * m_localRotation, m_scale));
+            currentDist += m_instanceSpacing;
         }
 
         return matrices;

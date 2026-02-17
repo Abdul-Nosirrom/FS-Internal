@@ -78,8 +78,8 @@ namespace FS.TagSystem
         
         public void OnBeforeSerialize()
         {
-            m_serializedTags.Clear();
-            m_serializedTags.AddRange(m_tags);
+            Debug.Assert(m_tags.Count == m_serializedTags.Count, 
+                "[TagSet] Tag/list desync detected");
         }
 
         public void OnAfterDeserialize()
