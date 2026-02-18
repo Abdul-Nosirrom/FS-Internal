@@ -2,7 +2,9 @@
 using FluffyUnderware.Curvy;
 using FS.Attributes;
 using FS.CombatSystem;
+using FS.GameplayActions;
 using FS.Math;
+using FS.TagSystem;
 using FS.Utility;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -67,6 +69,9 @@ public class BungeeRope : LevelObjectBase
             m_isStrongBounce = m_activeContext.actionController.HasActiveAction<SpringStompBounce>();
             m_activeContext.actionController.DisableActions();
         }
+
+        // Reset style jumps
+        context.actionController.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
         
         // Resettle might be active, just stop it
         StopAllCoroutines();

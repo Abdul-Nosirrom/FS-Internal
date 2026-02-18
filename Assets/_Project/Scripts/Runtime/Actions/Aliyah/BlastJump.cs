@@ -22,31 +22,29 @@ public class BlastJump : GameplayAction, IActionPhysicsReciever, IActionGizmoRec
     
     private IAnimation m_blastJumpAnimation;
 
-    public static Tag ActivationTag => Tag.Action.Activation.FingerGunBlast;
+    public static Tag ActivationTag => Tag.Action.Activation.StyleJumps.FingerGunBlast;
     
     public override void OnInitialize(GameObject owner)
     {
-        gameObject.GetTags().Add(ActivationTag);
-        
         m_physics.OnPhysicsStateChanged += TryResetJumpCounter;
         m_blastJumpAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>().FingerGunBlastJump;
     }
 
     private void TryResetJumpCounter(PhysicsState prevState , PhysicsState newState)
     {
-        if (newState == PhysicsState.Air) gameObject.GetTags().Add(ActivationTag); // Reset
+        if (newState == PhysicsState.Air) Tags.ResetActivation(ActivationTag); // Reset
         else m_blastJumpAnimation.Stop(m_animator);
     }
 
     protected override bool StartCondition()
     {
-        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && gameObject.HasTag(ActivationTag);
+        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && Tags.HasActivation(ActivationTag);
     }
 
     public override void OnStart()
     {
         // Consume double jump tag
-        gameObject.GetTags().Remove(ActivationTag);
+        Tags.ConsumeActivation(ActivationTag);
         
         // Play animation
         m_blastJumpAnimation.Play(m_animator);

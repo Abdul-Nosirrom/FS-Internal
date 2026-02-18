@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FS.Animation;
 using FS.Extensions;
 using FS.Player;
+using FS.TagSystem;
 using Sirenix.OdinInspector;
 using TimeUtils;
 using UnityEngine;
@@ -50,6 +51,11 @@ namespace FS.GameplayActions
         protected PhysicsController m_physics;
         protected FSAnimator m_animator;
         protected PlayerInputSystem m_input;
+
+        /// <summary>
+        /// Base declaration here to ensure we dont end up adding ITagProviders on incorrect components due to accessor methods
+        /// </summary>
+        public ITagSource Tags => m_actionController.gameObject.GetTags();
         
         private void Awake()
         {

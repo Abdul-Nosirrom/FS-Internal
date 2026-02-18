@@ -83,7 +83,7 @@ public class LockOnReticleController : MonoBehaviour
         bool targetFound = false;
         bool targetChanged = false;
         Transform target = null;
-        if (m_lockOnController)
+        if (m_lockOnController && m_lockOnController.CurrentLockOnTarget != null)
         {
             target = m_lockOnController.CurrentLockOnTarget.transform;
             targetFound = target != null;

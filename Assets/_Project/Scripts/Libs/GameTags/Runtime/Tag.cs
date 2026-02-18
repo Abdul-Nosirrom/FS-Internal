@@ -36,10 +36,39 @@ namespace FS.TagSystem
         #region ITagSource
 
         public int Count => 1;
-
+        
         public Tag this[int idx] => idx != 0 ? throw new ArgumentOutOfRangeException(nameof(idx)) : this;
 
+        public int this[Tag tag]
+        {
+            get => this.Equals(tag) ? 1 : 0;
+            set => throw new NotSupportedException("ITagSource Count Setter Not Available On Individual Tag Structs");
+        }
+
         public bool Has(Tag tag) => this.Equals(tag);
+
+        public bool Add(Tag tag) => throw new NotSupportedException("ITagSource Implementation Not Fully Available On 'Tag' Due To Boxing Copies");
+        public bool Remove(Tag tag) => throw new NotSupportedException("ITagSource Implementation Not Fully Available On 'Tag' Due To Boxing Copies");
+        public bool RemoveAll(Tag tag) => Remove(tag);
+        
+        // WARNING: Tag is a struct so gets copied over, binding to these isn't really a guarantee of things working as expected should not use, here for interface implementation
+        public event Action<Tag> OnTagAdded
+        {
+            add => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+            remove => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+        }
+
+        public event Action<Tag> OnTagRemoved
+        {
+            add => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+            remove => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+        }
+
+        public event Action<Tag, int> OnTagCountChanged
+        {
+            add => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+            remove => throw new NotSupportedException("ITagSource Events Unsupported on 'Tag' struct");
+        }
 
         #endregion
 

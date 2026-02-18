@@ -87,7 +87,7 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
 
             var prevState = m_state;
             m_state = value;
-            if (m_state == State.WallHold) m_numKicksPerformed++;
+            if (m_state == State.WallHold) Tags.ConsumeActivation(ActivationTag);
             m_sinceStateChange = 0;
             m_positionOnStateChange = m_physics.transform.position;
             m_velocityOnStateChange = m_physics.Velocity;
@@ -99,8 +99,9 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     #endregion
 
     #region Runtime Data - Wall Kick
-    
-    [RuntimeData] private int m_numKicksPerformed = 0;
+
+    public static Tag ActivationTag => Tag.Action.Activation.StyleJumps.SpringKick;
+    [RuntimeData] private int m_numKicksPerformed => Tags[ActivationTag];
     [RuntimeData] private Vector3 m_velocityIntoWall;
     [RuntimeData] private HitInfo m_wallHit;
     [RuntimeData] private Vector3 m_wallHitPoint;
@@ -148,8 +149,6 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     public override void OnInitialize(GameObject owner)
     {
         m_physics.OnPhysicsStateChanged += OnPhysicsStateChanged;
-        //gameObject.GetTags().A
-        //gameObject.GetTags().OnTagAdded += OnTagAdded; // add event bindings - if possible, bind to specific tag modifications?
     }
 
     public override void OnStart()
@@ -169,7 +168,7 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
         else // Homing Attack
         {
             InitializeHomingAttackVelocity();
-            m_numKicksPerformed = 0; // Reset wall-kick count on homing attack, refresh
+            Tags.ResetActivation(ActivationTag); // Reset wall-kick count on homing attack, refresh
         }
 
         m_sinceStateChange = 0;
@@ -187,7 +186,7 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
         switch (CurrentState)
         {
             case State.Dash:
-                m_numKicksPerformed = m_wallKickCount; // Whiffed wall-kick - prevent further kicks
+                Tags.ExhaustActivation(ActivationTag, m_wallKickCount); // Whiffed wall-kick - prevent further kicks
 
                 if ((m_interruptorAction == null || m_interruptorAction is AcidDropAction) && m_physics.State == PhysicsState.Air) 
                     m_anim_frontTuck.Play(m_animator);
@@ -501,7 +500,7 @@ public class SpringKick : GameplayAction, IActionPhysicsReciever, IActionInputEv
     {
         if (newState == PhysicsState.Air)
         {
-            m_numKicksPerformed = 0;
+            Tags.ResetActivation(ActivationTag);
         }
     }
     

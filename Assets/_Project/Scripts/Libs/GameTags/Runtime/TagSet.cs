@@ -33,7 +33,11 @@ namespace FS.TagSystem
     {
         [SerializeField] private List<Tag> m_serializedTags = new();
         private HashSet<Tag> m_tags = new();
-        
+
+        public event Action<Tag> OnTagAdded;
+        public event Action<Tag> OnTagRemoved;
+        public event Action<Tag, int> OnTagCountChanged;
+
         public int Count => m_tags.Count;
         
         /// <summary>Ordered read-only view of all tags in this set.</summary>
@@ -48,19 +52,44 @@ namespace FS.TagSystem
 
         public Tag this[int idx] => Tags[idx];
 
+        public int this[Tag tag]
+        {
+            get => Has(tag) ? 1 : 0;
+            set
+            {
+                if (value > 0) Add(tag);
+                else Remove(tag);
+            }
+        }
+
         #region Single Tag Operations
 
         /// <summary>Adds a tag if not already present.</summary>
-        public void Add(Tag tag)
+        public bool Add(Tag tag)
         {
-            if (m_tags.Add(tag)) m_serializedTags.Add(tag);
+            bool result = m_tags.Add(tag);
+            if (result)
+            {
+                m_serializedTags.Add(tag);
+                OnTagAdded?.Invoke(tag);
+                OnTagCountChanged?.Invoke(tag, 1);
+            }
+            return result;
         }
 
         /// <summary>Removes a tag from the set.</summary>
-        public void Remove(Tag tag)
+        public bool Remove(Tag tag)
         {
-            if (m_tags.Remove(tag)) m_serializedTags.Remove(tag);
+            bool result = m_tags.Remove(tag);
+            if (result)
+            {
+                m_serializedTags.Remove(tag);
+                OnTagRemoved?.Invoke(tag);
+                OnTagCountChanged?.Invoke(tag, 0);
+            }
+            return result;
         }
+        public bool RemoveAll(Tag tag) => Remove(tag);
 
         /// <summary>Returns true if the exact tag is present.</summary>
         public bool Has(Tag tag) => m_tags.Contains(tag);

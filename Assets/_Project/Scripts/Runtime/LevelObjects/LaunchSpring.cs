@@ -3,6 +3,7 @@ using FS.Animation;
 using FS.Attributes;
 using FS.GameplayActions;
 using FS.Math;
+using FS.TagSystem;
 using Sirenix.OdinInspector;
 using TimeUtils;
 using UnityEngine;
@@ -22,6 +23,9 @@ public class LaunchSpring : LevelObjectBase
         var gravity = ShouldOverrideGravity ? Gravity : Mathf.Abs(context.physics.VerticalPhysicsParams.m_upGravity);
         ProjectileMotion.LaunchPhysicsControllerToHeight(context.physics, LaunchHeight, gravity, out _, out _);
 
+        // Reset style jumps
+        context.physics.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
+        
         // Play front tuck animation if available
         s_frontTuckAnim.Play(context.animator);
     }

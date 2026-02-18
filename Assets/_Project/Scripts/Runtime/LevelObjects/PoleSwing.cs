@@ -5,7 +5,9 @@ using FluffyUnderware.Curvy;
 using FS.Attributes;
 using FS.CameraSystem;
 using FS.CombatSystem;
+using FS.GameplayActions;
 using FS.Math;
+using FS.TagSystem;
 using FS.Utility;
 using PrimeTween;
 using Sirenix.OdinInspector;
@@ -79,6 +81,9 @@ public class PoleSwing : LevelObjectBase
         if (!context.IsPlayer) return;
         
         m_isOccupied = true;
+
+        // Reset style jumps
+        context.physics.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
         
         context.actionController.DisableActions();
         BeginInteraction(context);

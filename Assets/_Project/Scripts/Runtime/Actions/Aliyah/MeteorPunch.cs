@@ -7,6 +7,7 @@ using FS.GameplayActions;
 using FS.Math;
 using FS.Player;
 using FS.Rendering;
+using FS.TagSystem;
 using FS.Utility;
 using PrimeTween;
 using TimeUtils;
@@ -23,11 +24,12 @@ public class MeteorPunch : GameplayAction, IActionPhysicsReciever
     [SerializeField] private AnimationCurve m_dashAnimSpeed = AnimationCurve.Constant(0f, 1f, 1f);
 
     [RuntimeData] private float m_speedMultiplier = 1f;
-    [RuntimeData] private bool m_dashReset = true;
     [RuntimeData] private RaycastHit[] m_forwardHits = new RaycastHit[4];
     
     private IAnimation m_meteorPunchAnimation;
     private IAnimation m_frontFlipRecovery;
+
+    public static Tag ActivationTag => Tag.Action.Activation.StyleJumps.MeteorDash;
     
     public override void OnInitialize(GameObject owner)
     {
@@ -38,12 +40,12 @@ public class MeteorPunch : GameplayAction, IActionPhysicsReciever
 
     private void TryResetDashCounter(PhysicsState prevState, PhysicsState newState)
     {
-        if (newState == PhysicsState.Air) m_dashReset = true;
+        if (newState == PhysicsState.Air) Tags.ResetActivation(ActivationTag);
     }
 
     protected override bool StartCondition()
     {
-        return m_dashReset && m_physics.State == PhysicsState.Air && m_input.GetButton(GameInput.Jump);
+        return m_physics.State == PhysicsState.Air && m_input.GetButton(GameInput.Jump) && Tags.HasActivation(ActivationTag);
     }
 
     public override void OnStart()
@@ -56,7 +58,7 @@ public class MeteorPunch : GameplayAction, IActionPhysicsReciever
         if (m_physics.m_vert.IsActive) m_physics.m_vert.TryEndAction(this);
         
         m_input.ConsumeInput(GameInput.Jump);
-        m_dashReset = false;
+        Tags.ConsumeActivation(ActivationTag);
 
         var upVector = -m_physics.GravityDir;
         var forwardVector = m_physics.LateralVelocityDirection.IsNearlyZero(4) ? m_physics.transform.forward : m_physics.LateralVelocityDirection;

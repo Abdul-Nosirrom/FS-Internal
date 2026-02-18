@@ -2,6 +2,7 @@
 using FS.Attributes;
 using FS.GameplayActions;
 using FS.Math;
+using FS.TagSystem;
 using PrimeTween;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -33,6 +34,9 @@ public class TrajectorySpring : LevelObjectBase
         context.physics.Position = transform.position;
         ProjectileMotion.LaunchPhysicsControllerWithLaunchAngle(context.physics, transform.position, EndPointWorld, m_gravity, m_launchAngle, out var launchTime, out _);
         LaunchSpring.s_frontTuckAnim.Play(context.animator);
+
+        // Reset style jumps
+        context.physics.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
 
         if (context.actionController != null)
         {

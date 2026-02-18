@@ -39,30 +39,29 @@ public class HoverJump : GameplayAction, IActionPhysicsReciever
     
     private IAnimation m_hoverJumpAnimation;
 
-    public static Tag ActivationTag => Tag.Action.Activation.HoverJump;
+    public static Tag ActivationTag => Tag.Action.Activation.StyleJumps.HoverJump;
 
     public override void OnInitialize(GameObject owner)
     {
-        gameObject.GetTags().Add(ActivationTag);
         m_physics.OnPhysicsStateChanged += TryResetJumpCounter;
         m_hoverJumpAnimation = m_animator.GetAnimationSet<ActionsAnimationSet>().WhipArmHoverJump;
     }
 
     private void TryResetJumpCounter(PhysicsState prevState , PhysicsState newState)
     {
-        if (newState == PhysicsState.Air) gameObject.GetTags().Add(ActivationTag); // Reset it
+        if (newState == PhysicsState.Air) Tags.ResetActivation(ActivationTag); // Reset it
     }
     
     protected override bool StartCondition()
     {
-        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && gameObject.HasTag(ActivationTag);
+        return m_input.GetButton(GameInput.Jump) && m_physics.State == PhysicsState.Air && Tags.HasActivation(ActivationTag);
     }
 
     private float m_timeStoppedFalling = 0f;
     
     public override void OnStart()
     {
-        gameObject.GetTags().Remove(ActivationTag); // Consume it
+        Tags.ConsumeActivation(ActivationTag); // Consume it
 
         m_hoverJumpAnimation.Play(m_animator);
         

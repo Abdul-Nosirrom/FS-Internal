@@ -22,6 +22,24 @@ namespace FS.TagSystem
         
         /// <summary>Returns true if the exact tag is present.</summary>
         bool Has(Tag tag);
+
+        /// <summary>
+        /// Indexer key-wise to get the count of a given tag
+        /// </summary>
+        /// <code>
+        /// someSource[Tag.Action.SpringKick] >= 3;
+        /// someSource[Tag.Action.SpringKick] = 3;
+        /// </code>
+        public int this[Tag tag] { get; set; }
+        
+        public bool Add(Tag tag);
+        public bool Remove(Tag tag);
+        public bool RemoveAll(Tag tag);
+        
+        // common events
+        public event Action<Tag> OnTagAdded;
+        public event Action<Tag> OnTagRemoved;
+        public event Action<Tag, int> OnTagCountChanged;
     }
     
     /// <summary>
@@ -31,7 +49,9 @@ namespace FS.TagSystem
     /// </summary>
     public static class TagSourceExtensions
     {
-        public static bool HasNone<T>(this T source, ITagSource other) where T : ITagSource
+        public static bool HasNone<T, K>(this T source, K other) 
+            where T : ITagSource 
+            where K : ITagSource
         {
             for (int i = 0; i < other.Count; i++)
             {
@@ -42,7 +62,9 @@ namespace FS.TagSystem
         
         #region HasAny — Fixed Overloads (Zero Allocation)
 
-        public static bool HasAny<T>(this T source, ITagSource other) where T : ITagSource
+        public static bool HasAny<T, K>(this T source, K other) 
+            where T : ITagSource 
+            where K : ITagSource
         {
             for (int i = 0; i < other.Count; i++)
             {
@@ -77,7 +99,9 @@ namespace FS.TagSystem
         
         #region HasAll — Fixed Overloads (Zero Allocation)
         
-        public static bool HasAll<T>(this T source, ITagSource other) where T : ITagSource
+        public static bool HasAll<T, K>(this T source, K other) 
+            where T : ITagSource 
+            where K : ITagSource
         {
             for (int i = 0; i < other.Count; i++)
             {
@@ -108,6 +132,156 @@ namespace FS.TagSystem
             return true;
         }
         
+        #endregion
+        
+        #region Bulk Add
+
+        /// <summary>Adds all tags from another source. Returns number of tags successfully added.</summary>
+        public static int AddAll<T, K>(this T source, K other)
+            where T : ITagSource
+            where K : ITagSource
+        {
+            int count = 0;
+            for (int i = 0; i < other.Count; i++)
+            {
+                if (source.Add(other[i])) count++;
+            }
+            return count;
+        }
+
+        public static int AddAll<T>(this T source, Tag a, Tag b) where T : ITagSource
+            => (source.Add(a) ? 1 : 0) + (source.Add(b) ? 1 : 0);
+
+        public static int AddAll<T>(this T source, Tag a, Tag b, Tag c) where T : ITagSource
+            => (source.Add(a) ? 1 : 0) + (source.Add(b) ? 1 : 0) + (source.Add(c) ? 1 : 0);
+
+        public static int AddAll<T>(this T source, Tag a, Tag b, Tag c, Tag d) where T : ITagSource
+            => (source.Add(a) ? 1 : 0) + (source.Add(b) ? 1 : 0) + (source.Add(c) ? 1 : 0) + (source.Add(d) ? 1 : 0);
+
+        public static int AddAll<T>(this T source, params Tag[] tags) where T : ITagSource
+        {
+            int count = 0;
+            foreach (var tag in tags) { if (source.Add(tag)) count++; }
+            return count;
+        }
+
+        #endregion
+
+        #region Bulk Remove (Exact Match)
+
+        /// <summary>Removes exact tags from another source. Returns number of tags successfully removed.</summary>
+        public static int RemoveAll<T, K>(this T source, K other)
+            where T : ITagSource
+            where K : ITagSource
+        {
+            int count = 0;
+            for (int i = 0; i < other.Count; i++)
+            {
+                if (source.RemoveAll(other[i])) count++;
+            }
+            return count;
+        }
+
+        public static int RemoveAll<T>(this T source, Tag a, Tag b) where T : ITagSource
+            => (source.RemoveAll(a) ? 1 : 0) + (source.RemoveAll(b) ? 1 : 0);
+
+        public static int RemoveAll<T>(this T source, Tag a, Tag b, Tag c) where T : ITagSource
+            => (source.RemoveAll(a) ? 1 : 0) + (source.RemoveAll(b) ? 1 : 0) + (source.RemoveAll(c) ? 1 : 0);
+
+        public static int RemoveAll<T>(this T source, Tag a, Tag b, Tag c, Tag d) where T : ITagSource
+            => (source.RemoveAll(a) ? 1 : 0) + (source.RemoveAll(b) ? 1 : 0) + (source.RemoveAll(c) ? 1 : 0) + (source.RemoveAll(d) ? 1 : 0);
+
+        public static int RemoveAll<T>(this T source, params Tag[] tags) where T : ITagSource
+        {
+            int count = 0;
+            foreach (var tag in tags) { if (source.RemoveAll(tag)) count++; }
+            return count;
+        }
+
+        #endregion
+
+        #region Bulk Remove (Hierarchy Match)
+
+        /// <summary>
+        /// Removes all tags in the source whose path falls under the given parent hierarchy.
+        /// e.g. RemoveMatching(Tag.Action.Activation) removes SpringKick, FingerGunBlast, etc.
+        /// Iterates backwards to safely handle removal during traversal.
+        /// Returns number of distinct tags removed.
+        /// </summary>
+        public static int RemoveMatching<T, K>(this T source, K parents) 
+            where T : ITagSource 
+            where K : ITagSource
+        {
+            int count = 0;
+            for (int i = source.Count - 1; i >= 0; i--)
+            {
+                var tag = source[i];
+                for (int j = 0; j < parents.Count; j++)
+                {
+                    if (tag.MatchesHierarchy(parents[j]))
+                    {
+                        source.RemoveAll(tag);
+                        count++;
+                        break;
+                    }
+                }
+            }
+            return count;
+        }
+        
+        /// <summary>
+        /// Removes all tags matching any of the given parent hierarchies.
+        /// e.g. RemoveMatching(Tag.Action.Activation, Tag.Status) clears both branches.
+        /// </summary>
+        public static int RemoveMatching<T>(this T source, Tag a, Tag b) where T : ITagSource
+        {
+            int count = 0;
+            for (int i = source.Count - 1; i >= 0; i--)
+            {
+                var tag = source[i];
+                if (tag.MatchesHierarchy(a) || tag.MatchesHierarchy(b))
+                {
+                    source.RemoveAll(tag);
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public static int RemoveMatching<T>(this T source, Tag a, Tag b, Tag c) where T : ITagSource
+        {
+            int count = 0;
+            for (int i = source.Count - 1; i >= 0; i--)
+            {
+                var tag = source[i];
+                if (tag.MatchesHierarchy(a) || tag.MatchesHierarchy(b) || tag.MatchesHierarchy(c))
+                {
+                    source.RemoveAll(tag);
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public static int RemoveMatching<T>(this T source, params Tag[] parents) where T : ITagSource
+        {
+            int count = 0;
+            for (int i = source.Count - 1; i >= 0; i--)
+            {
+                var tag = source[i];
+                foreach (var parent in parents)
+                {
+                    if (tag.MatchesHierarchy(parent))
+                    {
+                        source.RemoveAll(tag);
+                        count++;
+                        break; // Tag already removed, don't check remaining parents
+                    }
+                }
+            }
+            return count;
+        }
+
         #endregion
         
         /// <summary>Evaluates a <see cref="TagQuery"/> against this tag source.</summary>

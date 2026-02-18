@@ -39,9 +39,9 @@ namespace FS.TagSystem
         /// Increments the reference count for a tag.
         /// Fires <see cref="OnTagAdded"/> if this is the first reference.
         /// </summary>
-        public void Add(Tag tag)
+        public bool Add(Tag tag)
         {
-            if (!tag.IsValid) return;
+            if (!tag.IsValid) return false;
 
             m_tagCounts.TryGetValue(tag, out int count);
             m_tagCounts[tag] = count + 1;
@@ -54,16 +54,18 @@ namespace FS.TagSystem
                 m_activeTags.Add(tag);
                 OnTagAdded?.Invoke(tag);
             }
+
+            return true;
         }
 
         /// <summary>
         /// Decrements the reference count for a tag.
         /// Fires <see cref="OnTagRemoved"/> if the count reaches zero.
         /// </summary>
-        public void Remove(Tag tag)
+        public bool Remove(Tag tag)
         {
-            if (!tag.IsValid) return;
-            if (!m_tagCounts.TryGetValue(tag, out int count) || count <= 0) return;
+            if (!tag.IsValid) return false;
+            if (!m_tagCounts.TryGetValue(tag, out int count) || count <= 0) return false;
 
             int newCount = count - 1;
             if (newCount <= 0)
@@ -78,12 +80,42 @@ namespace FS.TagSystem
                 m_tagCounts[tag] = newCount;
                 OnTagCountChanged?.Invoke(tag, newCount);
             }
+
+            return true;
         }
 
         /// <summary>Returns the current reference count for a tag.</summary>
         public int GetCount(Tag tag)
         {
             return m_tagCounts.GetValueOrDefault(tag, 0);
+        }
+
+        public void SetCount(Tag tag, int count)
+        {
+            if (!tag.IsValid) return;
+    
+            int prev = m_tagCounts.GetValueOrDefault(tag, 0);
+            if (prev == count) return;
+    
+            if (count <= 0)
+            {
+                RemoveAll(tag);
+                return;
+            }
+    
+            m_tagCounts[tag] = count;
+    
+            // 0 → N transition
+            if (prev == 0)
+            {
+                m_activeTags.Add(tag);
+                OnTagCountChanged?.Invoke(tag, count);
+                OnTagAdded?.Invoke(tag);
+            }
+            else
+            {
+                OnTagCountChanged?.Invoke(tag, count);
+            }
         }
         
         #region ITagSource Implementation
@@ -92,6 +124,12 @@ namespace FS.TagSystem
 
         public Tag this[int idx] => m_activeTags[idx];
 
+        public int this[Tag tag]
+        {
+            get => m_tagCounts.GetValueOrDefault(tag, 0);
+            set => SetCount(tag, value);
+        }
+        
         /// <summary>Returns true if the tag has a count greater than 0.</summary>
         public bool Has(Tag tag)
         {
@@ -104,7 +142,7 @@ namespace FS.TagSystem
         /// Removes all references for a tag, regardless of count.
         /// Fires <see cref="OnTagRemoved"/> if the tag was present.
         /// </summary>
-        public void RemoveAll(Tag tag)
+        public bool RemoveAll(Tag tag)
         {
             m_activeTags.Remove(tag);
             
@@ -113,7 +151,10 @@ namespace FS.TagSystem
                 m_tagCounts.Remove(tag);
                 OnTagCountChanged?.Invoke(tag, 0);
                 OnTagRemoved?.Invoke(tag);
+                return true;
             }
+
+            return false;
         }
 
         /// <summary>Clears all tags and fires <see cref="OnTagRemoved"/> for each.</summary>

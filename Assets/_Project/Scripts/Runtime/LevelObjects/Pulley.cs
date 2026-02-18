@@ -3,6 +3,7 @@ using Drawing;
 using FS.Attributes;
 using FS.GameplayActions;
 using FS.Math;
+using FS.TagSystem;
 using PrimeTween;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -77,6 +78,9 @@ public class Pulley : LevelObjectBase
         // Cancel actions
         if (context.actionController)
             context.actionController.DisableActions();
+
+        // Reset style jumps
+        context.physics.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
 
         BeginInteraction(context);
 

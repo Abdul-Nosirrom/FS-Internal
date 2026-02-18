@@ -27,25 +27,37 @@ namespace FS.TagSystem
                 private static readonly Tag _internal = new("Action.Activation");
                 public static implicit operator Tag(Activation_ _) => _internal;
 
-                /// <summary>Spring Legs Double Jump</summary>
-                private static readonly Tag _internal_SpringKick = new("Action.Activation.SpringKick");
-                public Tag SpringKick => _internal_SpringKick;
-                public const string SpringKick_Path = "Action.Activation.SpringKick";
+                /// <summary>Relevant activation tags for Aliyahs unique style jumps</summary>
+                public readonly StyleJumps_ StyleJumps = new();
 
-                /// <summary>Finger Gun Double Jump</summary>
-                private static readonly Tag _internal_FingerGunBlast = new("Action.Activation.FingerGunBlast");
-                public Tag FingerGunBlast => _internal_FingerGunBlast;
-                public const string FingerGunBlast_Path = "Action.Activation.FingerGunBlast";
+                /// <summary>Relevant activation tags for Aliyahs unique style jumps</summary>
+                public class StyleJumps_
+                {
+                    public const string Path = "Action.Activation.StyleJumps";
+                    private static readonly Tag _internal = new("Action.Activation.StyleJumps");
+                    public static implicit operator Tag(StyleJumps_ _) => _internal;
 
-                /// <summary>Boxing Gloves Double Jump</summary>
-                private static readonly Tag _internal_MeteorDash = new("Action.Activation.MeteorDash");
-                public Tag MeteorDash => _internal_MeteorDash;
-                public const string MeteorDash_Path = "Action.Activation.MeteorDash";
+                    /// <summary>Spring Legs Double Jump</summary>
+                    private static readonly Tag _internal_SpringKick = new("Action.Activation.StyleJumps.SpringKick");
+                    public Tag SpringKick => _internal_SpringKick;
+                    public const string SpringKick_Path = "Action.Activation.StyleJumps.SpringKick";
 
-                /// <summary>Whip Arm Double Jump</summary>
-                private static readonly Tag _internal_HoverJump = new("Action.Activation.HoverJump");
-                public Tag HoverJump => _internal_HoverJump;
-                public const string HoverJump_Path = "Action.Activation.HoverJump";
+                    /// <summary>Finger Gun Double Jump</summary>
+                    private static readonly Tag _internal_FingerGunBlast = new("Action.Activation.StyleJumps.FingerGunBlast");
+                    public Tag FingerGunBlast => _internal_FingerGunBlast;
+                    public const string FingerGunBlast_Path = "Action.Activation.StyleJumps.FingerGunBlast";
+
+                    /// <summary>Boxing Gloves Double Jump</summary>
+                    private static readonly Tag _internal_MeteorDash = new("Action.Activation.StyleJumps.MeteorDash");
+                    public Tag MeteorDash => _internal_MeteorDash;
+                    public const string MeteorDash_Path = "Action.Activation.StyleJumps.MeteorDash";
+
+                    /// <summary>Whip Arm Double Jump</summary>
+                    private static readonly Tag _internal_HoverJump = new("Action.Activation.StyleJumps.HoverJump");
+                    public Tag HoverJump => _internal_HoverJump;
+                    public const string HoverJump_Path = "Action.Activation.StyleJumps.HoverJump";
+
+                }
 
             }
 

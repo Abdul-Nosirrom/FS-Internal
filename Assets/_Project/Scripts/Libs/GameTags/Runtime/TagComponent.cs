@@ -5,7 +5,7 @@ namespace FS.TagSystem
 {
     public interface ITagProvider
     {
-        public TagSet Tags { get; }
+        public ITagSource Tags { get; }
     }
     
     /// <summary>
@@ -24,10 +24,10 @@ namespace FS.TagSystem
     /// </summary>
     public class TagComponent : MonoBehaviour, ITagProvider
     {
-        [SerializeField] private TagSet m_tags = new();
+        [SerializeField] private TagStack m_tags = new();
 
         /// <summary>The tag set on this GameObject.</summary>
-        public TagSet Tags => m_tags;
+        public ITagSource Tags => m_tags;
 
         /// <summary>Returns true if this GameObject has the exact tag.</summary>
         public bool Has(Tag tagVal) => m_tags.Has(tagVal);
@@ -50,7 +50,10 @@ namespace FS.TagSystem
         {
             if (!s_cache.TryGetValue(go, out var provider))
             {
-                provider = go.GetComponentInChildren<ITagProvider>() ?? go.GetComponentInParent<ITagProvider>();
+                provider = go.GetComponentInChildren<ITagProvider>() 
+                           ?? go.GetComponentInParent<ITagProvider>();
+                if (provider == null && go.scene.isLoaded) 
+                    provider = go.AddComponent<TagComponent>();
                 s_cache.Add(go, provider);
             }
             return provider;
@@ -71,7 +74,7 @@ namespace FS.TagSystem
         }
 
         /// <summary>Returns the tag set, or null if no <see cref="TagComponent"/> is present.</summary>
-        public static TagSet GetTags(this GameObject go)
+        public static ITagSource GetTags(this GameObject go)
         {
             var comp = go.GetTagProvider();
             return comp?.Tags;

@@ -4,8 +4,10 @@ using System.Linq;
 using Drawing;
 using FS.Attributes;
 using FS.CameraSystem;
+using FS.GameplayActions;
 using FS.Math;
 using FS.Rendering;
+using FS.TagSystem;
 using FS.Utility;
 using PrimeTween;
 using Sirenix.OdinInspector;
@@ -63,6 +65,9 @@ public class CannonLauncher : LevelObjectBase
     {
         if (IsOccupied) return;
         if (!context.IsPlayer) return;
+
+        // Reset style jumps
+        context.physics.ResetActivationsUnder(Tag.Action.Activation.StyleJumps);
         
         BeginInteraction(context);
         StartInteractionCoroutine(context, DoCannonLaunch(context));
