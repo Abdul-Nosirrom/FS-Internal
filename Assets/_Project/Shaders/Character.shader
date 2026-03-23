@@ -83,14 +83,6 @@ Shader "FreeSkies/Character"
         [ShowIf(_ALPHATEST_ON)] _BurnSmoothness("Burn Smoothness", Range(0,1)) = 0
         
         //////////////////////////
-        // OUTLINES
-        /////////////////////////
-        [SectionHeader(Outlines)]
-        [Toggle(_ENABLE_OUTLINES)] _EnableOutlines("Enable Outlines", Float) = 0
-        [ShowIf(_ENABLE_OUTLINES)] _OutlineWidth("Outline Width", Range(0,1)) = 0.1
-        [ShowIf(_ENABLE_OUTLINES)] _OutlineColor("Outline Color", Color) = (0,0,0,1)
-        
-        //////////////////////////
         // MISC
         /////////////////////////
         [HideInInspector] _HitStunFlashTime("Hit Stun Flash Time", Float) = 0
@@ -106,104 +98,6 @@ Shader "FreeSkies/Character"
         }
 
         // =====================================================================
-        // SHARED CODE
-        // =====================================================================
-        HLSLINCLUDE
-        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-        #include "Library/CombatParameters.hlsl"
-
-        // CBUFFER - identical across all passes for SRP Batcher
-        CBUFFER_START(UnityPerMaterial)
-            // Base colors
-            float4 _BaseMap_ST;
-            float4 _BaseColor;
-
-            // SSS Params
-            float4 _ShadowTint;
-
-            // Light
-            float _LightTerminator;
-            float _ShadowSmoothness;
-            float _ShadowInfluence;
-        
-            // Rim Light
-            int _RimHighlightMode;
-
-            int _RimLightInfluence;
-        
-            float _RimSmoothness;
-            float _RimThreshold;
-            float4 _RimColor;
-            float _RimDepthMaskStrength;
-            float _RimDepthMaskThreshold;
-            float _RimDepthOffset;
-        
-            // Alpha Cutoff/Dissolve
-            float4 _AlphaDissolveTex_ST;
-            float _AlphaCutoff;
-            float4 _BurnColor;
-            float _BurnSize;
-            float _BurnSmoothness;
-
-            // Outlines
-            float _OutlineWidth;
-            float4 _OutlineColor;
-
-            COMBAT_PARAMETERS;
-        CBUFFER_END
-
-        // Textures
-        TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);
-        TEXTURE2D(_SSSMap);             SAMPLER(sampler_SSSMap);
-        TEXTURE2D(_LightRamp);          SAMPLER(sampler_LightRamp);
-        TEXTURE2D(_AlphaDissolveTex);   SAMPLER(sampler_AlphaDissolveTex);
-
-        #define RIM_DEPTH_BASED (_RimHighlightMode != 1)
-        #define RIM_FRESNEL_BASED (_RimHighlightMode != 0)
-
-        #include "Library/Core/Common.hlsl"
-        #include "Library/Effects.hlsl"
-        
-        #define EXTRA_ATTRIBUTES float4 color : COLOR;
-        #define EXTRA_INTERPOLATORS \
-            float4 color : COLOR;\
-            float3 positionWS : TEXCOORD4;\
-            float3 positionOS : TEXCOORD5;\
-            float3 viewDirWS : TEXCOORD6;
-        
-        #define TRANSFER_EXTRA(output, input)\
-            output.color = input.color;\
-            output.positionOS = input.positionOS.xyz;\
-            output.positionWS = TransformObjectToWorld(input.positionOS.xyz);\
-            output.viewDirWS = GetWorldSpaceNormalizeViewDir(output.positionWS);
-        
-        // Computes the dissolve
-        float4 AlphaDissolveBurn(float2 uv)
-        {
-            // Easy early outs
-            if (_AlphaCutoff <= 0) return 0;
-            if (_AlphaCutoff >= 1) { discard; }
-            
-            uv = TRANSFORM_TEX(uv, _AlphaDissolveTex);
-            float4 alphaTex = SAMPLE_TEXTURE2D(_AlphaDissolveTex, sampler_AlphaDissolveTex, uv);
-            float alpha = alphaTex.a;
-            if (alpha <= _AlphaCutoff)
-                discard;
-            
-            float edgeDistance = alpha - _AlphaCutoff;
-            float burnMask = smoothstep(_BurnSize, _BurnSize - _BurnSmoothness, edgeDistance);
-            return float4(_BurnColor.rgb * lerp(0.3, 1, alphaTex.r), _BurnColor.a * burnMask);
-        }
-
-        #pragma shader_feature_local_fragment _ALPHATEST_ON
-
-        #ifdef _ALPHATEST_ON
-            #define ALPHA_CLIP(input) AlphaDissolveBurn(GetNormalizedScreenSpaceUV(input.positionCS))
-        #endif
-
-        ENDHLSL
-
-        // =====================================================================
         // FORWARD PASS
         // =====================================================================
         Pass
@@ -212,6 +106,8 @@ Shader "FreeSkies/Character"
             Tags
             {
                 "LightMode" = "UniversalForward"
+                "ShaderGen" = "True"
+                "InjectForwardBody" = "On"
             }
 
             Cull Back
@@ -226,24 +122,96 @@ Shader "FreeSkies/Character"
             #pragma shader_feature_local_fragment _LIGHT_RAMP
             #pragma shader_feature_local_fragment _RIM
             #pragma shader_feature_local_fragment _RIM_NOISEMASK
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
 
             #include_with_pragmas "Library/Keywords/ForwardKeywords.hlsl"
             #include "Library/Core/Lighting/LightLoop.hlsl"
             #include "Library/Core/DebugSupport.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Library/CombatParameters.hlsl"
+
+            // CBUFFER - identical across all passes for SRP Batcher
+            CBUFFER_START(UnityPerMaterial)
+                // Base colors
+                float4 _BaseMap_ST;
+                float4 _BaseColor;
+
+                // SSS Params
+                float4 _ShadowTint;
+
+                // Light
+                float _LightTerminator;
+                float _ShadowSmoothness;
+                float _ShadowInfluence;
             
-            #define NEEDS_NORMAL
-            #define NEEDS_TANGENT
+                // Rim Light
+                int _RimHighlightMode;
+
+                int _RimLightInfluence;
             
-            #define PASS_ATTRIBUTES float2 lightmapUV : TEXCOORD1;
-            #define PASS_INTERPOLATORS\
-                half fogFactor : FOG_FACTOR;\
+                float _RimSmoothness;
+                float _RimThreshold;
+                float4 _RimColor;
+                float _RimDepthMaskStrength;
+                float _RimDepthMaskThreshold;
+                float _RimDepthOffset;
+            
+                // Alpha Cutoff/Dissolve
+                float4 _AlphaDissolveTex_ST;
+                float _AlphaCutoff;
+                float4 _BurnColor;
+                float _BurnSize;
+                float _BurnSmoothness;
+
+                // Outlines
+                float _OutlineWidth;
+                float4 _OutlineColor;
+
+                COMBAT_PARAMETERS;
+            CBUFFER_END
+
+            // Textures
+            TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_SSSMap);             SAMPLER(sampler_SSSMap);
+            TEXTURE2D(_LightRamp);          SAMPLER(sampler_LightRamp);
+            TEXTURE2D(_AlphaDissolveTex);   SAMPLER(sampler_AlphaDissolveTex);
+
+            #define RIM_DEPTH_BASED (_RimHighlightMode != 1)
+            #define RIM_FRESNEL_BASED (_RimHighlightMode != 0)
+
+            #include "Library/Core/Common.hlsl"
+            #include "Library/Effects.hlsl"
+            
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float2 lightmapUV : TEXCOORD1;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
+                float4 color : COLOR;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+            
+            struct Interpolators
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalWS : NORMAL;
+                float3 tangentWS : TANGENT;
+                float4 color : COLOR;
+                float3 positionWS : TEXCOORD4;
+                float3 positionOS : TEXCOORD5;
+                float3 viewDirWS : TEXCOORD6;
+                
+                half fogFactor : FOG_FACTOR;
                 DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, VERTEX_SH);
-            
-            #include "Library/Core/StructBuilder.hlsl"
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
             
             Interpolators Vert(Attributes input)
             {
-                Interpolators output = INIT_INTERPOLATORS;
+                Interpolators output = (Interpolators)0;
 
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
@@ -264,6 +232,24 @@ Shader "FreeSkies/Character"
                 OUTPUT_LIGHTMAP_UV(input.lightmapUV, unity_LightmapST, output.lightmapUV);
                 return output;
             }
+            
+            // Computes the dissolve
+            float4 AlphaDissolveBurn(float2 uv)
+            {
+                // Easy early outs
+                if (_AlphaCutoff <= 0) return 0;
+                if (_AlphaCutoff >= 1) { discard; }
+                
+                uv = TRANSFORM_TEX(uv, _AlphaDissolveTex);
+                float4 alphaTex = SAMPLE_TEXTURE2D(_AlphaDissolveTex, sampler_AlphaDissolveTex, uv);
+                float alpha = alphaTex.a;
+                if (alpha <= _AlphaCutoff)
+                    discard;
+                
+                float edgeDistance = alpha - _AlphaCutoff;
+                float burnMask = smoothstep(_BurnSize, _BurnSize - _BurnSmoothness, edgeDistance);
+                return float4(_BurnColor.rgb * lerp(0.3, 1, alphaTex.r), _BurnColor.a * burnMask);
+            }
 
             // Pass in accumulating lightmask & lighting 
             void ComputeLighting(Light L, float3 N, float3 V, inout float3 light, inout float lightMask)
@@ -283,23 +269,14 @@ Shader "FreeSkies/Character"
                 light += lightVal * L.color;
             }
 
-            #include "Library/Noise/Noise3D.hlsl"
             float3 Frag(Interpolators input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                
-                //float y = input.positionOS.y;
-                //float osNoise = worley_3d(input.positionOS, 8, sin(_Time.y) * sin(_Time.y));
-                //return osNoise;
-                //y = 1-saturate((osNoise * 0.25f + y) / 8.f);
-                //float clipT = sin(_Time.y * 0.25f) * sin(_Time.y * 0.25f);
-                //if (y <= 0.95) discard;
-                //return y;
 
                 float4 burn = float4(0,0,0,0);
 #ifdef _ALPHATEST_ON            
                 // Do early so clipping early outs we dont sample textures
-                burn = AlphaDissolveBurn(GetNormalizedScreenSpaceUV(input.positionCS));
+                burn = AlphaDissolveBurn(input.uv);
 #endif                
                 ApplyLODCrossfade(input.positionCS);
 
@@ -381,174 +358,8 @@ Shader "FreeSkies/Character"
             }
             ENDHLSL
         }
-        // =====================================================================
-        // AURA EFFECT
-        // =====================================================================
-//        Pass
-//        {
-//            Name "Aura"
-//            Tags { "LightMode" = "Aura" }
-//            ZWrite Off
-//            ZTest LEqual
-//            Cull Front
-//            Blend SrcAlpha OneMinusSrcAlpha
-//            
-//            HLSLPROGRAM
-//            
-//            #define VERTEX_DISPLACEMENT(posOS, input) AuraVertex(posOS, input)
-//            #define NEEDS_NORMAL;
-//            
-////            #include_with_pragmas "Library/Core/Passes/ForwardVertex.hlsl"
-//            #include_with_pragmas "Library/Keywords/DOTSInstancing.hlsl"
-//            #include "Library/Core/StructBuilder.hlsl"
-//            #include "Library/Core/Hooks.hlsl"
-//
-//            #include "Library/Noise/Noise3D.hlsl"
-//            #pragma vertex Vert
-//            #pragma fragment Frag
-//            
-//            void AuraVertex(inout float4 posOS, Attributes input)
-//            {
-//                float3 noisePos = posOS + float3(0, 1, 0) * _Time.y * 0.5;
-//                float noiseSample = fbm_perlin_3d(noisePos, 5);
-//                noiseSample = lerp(0.4, 0.6, noiseSample);
-//                // inflate a bit first
-//                posOS.xyz += normalize(input.normalOS) * 0.05f;
-//                posOS.xyz += float3(0,1,0) * noiseSample * 0.3f;
-//            }
-//
-//            Interpolators Vert(Attributes input)
-//            {
-//                Interpolators output = INIT_INTERPOLATORS;
-//
-//                UNITY_SETUP_INSTANCE_ID(input);
-//                UNITY_TRANSFER_INSTANCE_ID(input, output);
-//                
-//                VERTEX_DISPLACEMENT(input.positionOS, input);
-//                
-//                output.positionCS = TransformObjectToHClip(input.positionOS);
-//                output.positionCS.z -= HALF_EPS * 12;
-//                output.uv = input.uv;
-//                
-//                TRANSFER_EXTRA(output, input);
-//            
-//            #ifdef NEEDS_NORMAL
-//                output.normalWS = TransformObjectToWorldNormal(input.normalOS, true);
-//            #endif
-//
-//                return output;
-//            }
-//                        
-//            float4 Frag(Interpolators input) : SV_TARGET0
-//            {
-//                float3 posOS = input.positionOS;
-//                float noiseSample = worley_3d(posOS, 16);
-//                float3 color = lerp(float3(0.2, 0, 0.4), float3(0.6, 0, 0.4), noiseSample);
-//                float alpha = fbm_perlin_3d_01(posOS, 32);
-//                
-//                float yGrad = smoothstep(0.2f, 0.3f, posOS.y);
-//                
-//                //return yGrad;
-//                return float4(color * 8, alpha * yGrad);
-//            }
-//            
-//            ENDHLSL
-//        }
-        // =====================================================================
-        // INVERSE HULL OUTLINES
-        // =====================================================================
-        Pass
-        {
-            Name "Inverse Hull Outlines"
-            Tags { "LightMode" = "InverseHull" }
-            ZWrite Off
-            ZTest LEqual
-            Cull Front
-            
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/InverseHullOutlines.hlsl"
-            ENDHLSL
-        }
-        // =====================================================================
-        // SHADOW CASTER
-        Pass
-        {
-            Name "ShadowCaster"
-            Tags { "LightMode" = "ShadowCaster" }
-
-            ZWrite On
-            ZTest LEqual
-            ColorMask 0
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/ShadowCaster.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // DEPTH ONLY
-        // =====================================================================
-        Pass
-        {
-            Name "DepthOnly"
-            Tags { "LightMode" = "DepthOnly" }
-
-            ZWrite On
-            ColorMask R
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/DepthOnly.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // DEPTH NORMALS
-        // =====================================================================
-        Pass
-        {
-            Name "DepthNormals"
-            Tags { "LightMode" = "DepthNormals" }
-
-            ZWrite On
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/DepthNormals.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // MOTION VECTORS
-        // =====================================================================
-        Pass
-        {
-            Name "MotionVectors"
-            Tags { "LightMode" = "MotionVectors" }
-
-            ColorMask RG
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/MotionVectors.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // META (Lightmap baking)
-        // =====================================================================
-        Pass
-        {
-            Name "Meta"
-            Tags { "LightMode" = "Meta" }
-
-            Cull Off
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/Meta.hlsl"
-            ENDHLSL
-        }
+        [InjectPass:Outline]
+        [InjectBasePasses]
     }
 
     Fallback "Hidden/Universal Render Pipeline/FallbackError"

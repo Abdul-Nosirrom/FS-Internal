@@ -44,11 +44,12 @@ namespace FS.Animation
 
         public override ITransition GetTransition() => m_transition;
 
-        public override AnimancerState Play(AnimancerComponent animator)
+        public override AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1)
         {
             if (!animator || !HasValidClips()) return null;
             
-            SequenceState state = (SequenceState)animator.Layers[(int)Layer].Play(this);
+            fadeDuration = fadeDuration >= 0 ? fadeDuration : FadeDuration;
+            SequenceState state = (SequenceState)animator.Layers[(int)Layer].Play(this, fadeDuration);
 
             for (int s = 0; s < state.ChildCount; s++)
             {

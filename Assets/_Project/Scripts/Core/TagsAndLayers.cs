@@ -43,6 +43,9 @@ public static class PhysicsLayers
 
     public static readonly LayerMask TargetingQuery = LayerMask.NameToLayer("TargetingQuery");
     public static readonly LayerMask HitBox = LayerMask.NameToLayer("HitBox");
+
+    // Visual Layers
+    public static readonly LayerMask HeadLookAt = LayerMask.NameToLayer("HeadLookAt");
     
     // Collision Matrix Helper
     private static Dictionary<int, int> m_collisionMatrix;

@@ -1,10 +1,10 @@
-﻿using FS.Rendering;
-using UnityEditor;
-using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.RenderGraphModule;
-using UnityEngine.Rendering.Universal;
-
+﻿// using FS.Rendering;
+// using UnityEditor;
+// using UnityEngine;
+// using UnityEngine.Rendering;
+// using UnityEngine.Rendering.RenderGraphModule;
+// using UnityEngine.Rendering.Universal;
+//
 // public class ShaderPlayground : ICameraRenderPass
 // {
 //     private static ShaderPlayground instance;
@@ -17,9 +17,9 @@ using UnityEngine.Rendering.Universal;
 //     [InitializeOnLoadMethod]
 //     private static void Register()
 //     {
-//         Debug.Log("Registering ShaderPlayground");
-//         //Instance.RemoveGlobalCommandBuffer();
-//         //Instance.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingSkybox);
+//         
+//         Instance.RemoveGlobalCommandBuffer();
+//         Instance.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingSkybox);
 //     }
 //
 //     private static Material material;
@@ -32,6 +32,6 @@ using UnityEngine.Rendering.Universal;
 //     
 //     public void OnCameraRender(CommandBuffer cmd, TextureHandle source, TextureHandle dest)
 //     {
-//         //Blitter.BlitCameraTexture(cmd, source, dest, material, 0);
+//         Blitter.BlitCameraTexture(cmd, source, dest, material, 0);
 //     }
 // }

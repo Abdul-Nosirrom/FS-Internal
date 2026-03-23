@@ -1,9 +1,6 @@
-using System;
 using System.Collections.Generic;
-using Animancer.Editor;
 using FluffyUnderware.Curvy;
 using FS.Rendering;
-using Sirenix.OdinInspector;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -22,24 +19,38 @@ public class BoneChainInstancedRenderer : MonoBehaviour, ICommandBufferPass
 
     private CurvySpline m_splineGuide;
 
+    private const int MAX_INSTANCE_COUNT = 1024;
+    private Matrix4x4[] m_trsMatrices;
+
     void OnEnable()
     {
+        m_trsMatrices = new Matrix4x4[MAX_INSTANCE_COUNT]; // Preallocate array to max count
+        
         m_splineGuide = CurvySpline.Create();
         m_splineGuide.transform.SetParent(transform);
         m_splineGuide.Clear(false);
         m_splineGuide.SetControlPointCount(m_boneChain.Count);
-        this.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingOpaques);
+        //this.AddGlobalCommandBuffer(RenderPassEvent.AfterRenderingOpaques);
     }
 
     void OnDisable()
     {
         DestroyImmediate(m_splineGuide);
         m_splineGuide = null;
-        this.RemoveGlobalCommandBuffer();
+        //this.RemoveGlobalCommandBuffer();
     }
 
     public void OnCameraRender(CommandBuffer cmd)
     {
+        // if (m_boneChain.Count <= 1) return;
+        // if (m_mesh == null || m_material == null) return;
+        //
+        // SyncSplineGuide();
+        // int count = ComputeInstanceTransforms();
+        // if (count == 0) return;
+        // cmd.DrawMeshInstanced(); // TODO: Do our shaders support GPU instancing or only SRP Batching? Research this
+        // Graphics.RenderMeshInstanced(RenderParams, m_mesh, 0, m_trsMatrices, count);
+
         // if (m_boneChain.Count <= 1) return;
         // if (m_mesh == null || m_material == null) return;
         //
@@ -69,14 +80,14 @@ public class BoneChainInstancedRenderer : MonoBehaviour, ICommandBufferPass
         if (m_mesh == null || m_material == null) return;
         
         SyncSplineGuide();
-        var matrices = ComputeInstanceTransforms();
-        if (matrices.Count == 0) return;
-        Graphics.RenderMeshInstanced(RenderParams, m_mesh, 0, matrices);
+        int count = ComputeInstanceTransforms();
+        if (count == 0) return;
+        Graphics.RenderMeshInstanced(RenderParams, m_mesh, 0, m_trsMatrices, count);
     }
 
     private void SyncSplineGuide()
     {
-        Debug.Log($"Length mismatch? {m_boneChain.Count} and {m_splineGuide.Count}");
+        //Debug.Log($"Length mismatch? {m_boneChain.Count} and {m_splineGuide.Count}");
         for (int b = 0; b < m_boneChain.Count; b++)
         {
             var boneTransform  = m_boneChain[b];
@@ -87,27 +98,29 @@ public class BoneChainInstancedRenderer : MonoBehaviour, ICommandBufferPass
         }
     }
 
-    private List<Matrix4x4> ComputeInstanceTransforms()
+    private int ComputeInstanceTransforms()
     {
-        List<Matrix4x4> matrices = new List<Matrix4x4>();
-
+        int count = 0;
         float splineDist = m_splineGuide.TFToDistance(1);
-        // Limit to 250 instances
-        if (m_instanceSpacing <= 0) return matrices;
-        if (splineDist / m_instanceSpacing > 250) return matrices;
+        // Limit to MAX_INSTANCE_COUNT instances
+        if (m_instanceSpacing <= 0) return count;
+        if (splineDist / m_instanceSpacing > MAX_INSTANCE_COUNT)
+        {
+            Debug.LogError($"[Chain Instance Rendering]: Exceeded {MAX_INSTANCE_COUNT} count. Predicted count was: {Mathf.Floor(splineDist / m_instanceSpacing)}");
+            return count;
+        }
         
         float currentDist = 0f;
-        int b = 0;
         while (currentDist <= splineDist)
         {
-            Quaternion perInstVariation = b % 2 == 0 ? m_perInstanceRotOffset : Quaternion.identity;
-            b++;
+            Quaternion perInstVariation = count % 2 == 0 ? m_perInstanceRotOffset : Quaternion.identity;
             float tf = m_splineGuide.DistanceToTF(currentDist);
             m_splineGuide.InterpolateAndGetTangentFast(tf, out var pos, out var tangent, Space.World);
-            matrices.Add(Matrix4x4.TRS(pos, Quaternion.LookRotation(tangent) * perInstVariation * m_localRotation, m_scale));
+            m_trsMatrices[count] = Matrix4x4.TRS(pos, Quaternion.LookRotation(tangent) * perInstVariation * m_localRotation, m_scale);
             currentDist += m_instanceSpacing;
+            count++;
         }
 
-        return matrices;
+        return count;
     }
 }

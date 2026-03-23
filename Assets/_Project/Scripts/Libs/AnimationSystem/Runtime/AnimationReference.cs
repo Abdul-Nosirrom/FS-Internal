@@ -132,18 +132,18 @@ namespace FS.Animation
         }
         
         // We are getting an animator that we don't know and we could get different animators for each play, so we need to retrieve the animation each time
-        public AnimancerState Play(AnimancerComponent animator)
+        public AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1)
         {
             if (!GetTransition(animator as FSAnimator, out var animationBase)) return null;
-            if (animationBase is IAnimation fsAnim) return fsAnim.Play(animator);
-            return animator.Play(animationBase);
+            if (animationBase is IAnimation fsAnim) return fsAnim.Play(animator, fadeDuration);
+            return animator.Play(animationBase, fadeDuration);
         }
         
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer)
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1)
         {
             if (!GetTransition(animator as FSAnimator, out var animationBase)) return null;
-            if (animationBase is IAnimation fsAnim) return fsAnim.Play(animator, layer);
-            return animator.Play(animationBase);
+            if (animationBase is IAnimation fsAnim) return fsAnim.Play(animator, layer, fadeDuration);
+            return animator.Play(animationBase, fadeDuration);
         }
 
         public AnimancerState GetState(FSAnimator animator, bool createIfDoesntExist = false)

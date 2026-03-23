@@ -17,6 +17,7 @@ using UnityEngine.SceneManagement;
 /// to ensure triggers arent invoked more than needed, and helps cache the refs for objects that will function on multiple interactors,
 /// </summary>
 [SelectionBase]
+[Icon("LevelObject Icon")]
 public abstract class LevelObjectBase : MonoBehaviourGizmos
 {
     // TODO: Alongside the PhysicsController, we can set "Oh active state is LevelObject control", we should have a way to cancel out of it

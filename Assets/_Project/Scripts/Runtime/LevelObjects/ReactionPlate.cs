@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Drawing;
 using FS.Attributes;
 using FS.GameplayActions;
+using FS.Player;
 using FS.Utility;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -131,27 +132,16 @@ public class ReactionPlate : LevelObjectBase
                 if (targetPlate >= PlateCount) break;
 
                 // Reached new plate, wait for input for specified time or just exit out
-                float timeWaited = 0f;
-                bool inputReceived = false;
-
-                while (timeWaited < k_plateWaitTime)
+                var wait = context.PlayerInput.WaitForPress(GameInput.Jump, timeout: k_plateWaitTime);
+                while (wait.keepWaiting)
                 {
                     context.physics.Teleport(playerPos, playerRot);
                     context.physics.Velocity = Vector3.zero;
-
-                    if (context.PlayerInput.GetButton(GameInput.Jump))
-                    {
-                        context.PlayerInput.ConsumeInput(GameInput.Jump);
-                        inputReceived = true;
-                        break;
-                    }
-
-                    timeWaited += Time.deltaTime;
                     yield return Yields.WaitForFixedUpdate;
                 }
-
-                // Failed to press input in time
-                if (!inputReceived) break;
+                
+                // No press occured, we exit
+                if (!wait.WasPressed) break;
             }
         }
         finally

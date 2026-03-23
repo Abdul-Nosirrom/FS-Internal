@@ -324,7 +324,7 @@ namespace FS.Editor
             
             var currentEvt = Event.current;
             
-            if (currentEvt != null && thumbnailRect.Contains(currentEvt.mousePosition) && !m_mouseOutsideOfPalette) // Also ensure mouse isn't below the scroll view region padding
+            if (currentEvt != null && thumbnailRect.Contains(currentEvt.mousePosition))// TODO: this check is bugged && !m_mouseOutsideOfPalette) // Also ensure mouse isn't below the scroll view region padding
             {
                 Repaint();
                 

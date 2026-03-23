@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using Animancer;
+using TimeUtils;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 
+// TODO: Fix broken BeginFadeOut invocation. Unsure if it's just a problem w/ our wallslide and our use of CrossFade
+// Or if its a underlying problem. Need to do more testing. Committing this for the msg and attempts, but haven't changed the code
 namespace FS.Animation
 {
     public static class AnimancerStateExtensions
@@ -78,6 +82,8 @@ namespace FS.Animation
 
             private const float k_weightEpsilon = 0.01f;
             private float m_previousTargetWeight = 0f;
+            //private float m_previousWeight = 0f;
+            private TimeSince m_timeSinceBound;
             
             public EventEntry(AnimancerState state, Action callback, Type type)
             {
@@ -89,6 +95,7 @@ namespace FS.Animation
                 
                 float targetWeight = TargetWeight;
                 m_previousTargetWeight = targetWeight;
+                //m_previousWeight = 0f;//Weight; First frame is off, for some reason next frame is instantly target weight 0 while this frame is 1, incorrectly it seems
         
                 // Start active if the state is in a triggerable condition
                 IsActive = type switch
@@ -97,6 +104,14 @@ namespace FS.Animation
                     Type.BeginFadeOut or Type.EndFadeOut => targetWeight <= k_weightEpsilon,
                     _ => true
                 };
+
+                m_timeSinceBound = 0f;
+
+
+                //if (EventType == Type.BeginFadeOut && State.DebugName.ToString().Contains("wall", StringComparison.InvariantCultureIgnoreCase))
+                //{
+                //    Debug.Log($"[AnimEventBinder]: {Time.time:F2} Updatable Target Weight: {targetWeight} | Weight: {Weight} | IsActive? {IsActive}");
+                //}
             }
 
             public void TryInvoke()
@@ -104,6 +119,29 @@ namespace FS.Animation
                 UpdateParentLayerWeight();
                 float currentTargetWeight = TargetWeight;
                 float currentWeight = Weight;
+
+                // Check for bug solving, is the CState in active/not contributing but we're still waiting on an event?
+                // if ((EventType == Type.BeginFadeOut || EventType == Type.EndFadeOut) && !State.IsActive)
+                // {
+                //     if (IsActive)
+                //     {
+                //         //EditorApplication.isPaused = true;
+                //         Debug.Log($"[AnimEvent] {State.DebugName} Waiting on animation event ({EventType.ToString()}), but animation is in-active " + "\n" +
+                //                   $"Time Since Bound: {m_timeSinceBound}" + "\n" +
+                //                   $"Weight: {State.Weight}" + "\n" +
+                //                   $"TargetWeight: {State.TargetWeight}" + "\n" +
+                //                   $"EffectiveWeight: {State.EffectiveWeight}" + "\n" +
+                //                   $"LayerWeight: {State.Layer.Weight}" + "\n" +
+                //                   $"LayerTargetWeight: {State.Layer.TargetWeight}" + "\n" +
+                //                   $"EffectiveWeight: {State.Layer.EffectiveWeight}");
+                //     }
+                // }
+
+                // Target weight isnt super responsive for some reason, at least for fade out need to look into it more
+                // So rn, we just use this workaround by checking in on the sign of the weight delta, if negative that indicates we start fading out
+                // Obv broken case: What if we don't fade out to weight 0 but go to 0.5? Utilizing target weight how we intended should solve this, but given
+                // the problem of me not fully understanding the values it's giving (layer weight 0?) we just use this as in our use-case, that edge case is unlikely.
+                //float deltaWeight = currentWeight - m_previousWeight;
         
                 if (IsActive)
                 {
@@ -111,10 +149,16 @@ namespace FS.Animation
                     {
                         Type.BeginFadeIn => currentTargetWeight >= k_weightEpsilon,
                         Type.EndFadeIn => currentTargetWeight >= 1f - k_weightEpsilon && currentWeight >= 1f - k_weightEpsilon,
-                        Type.BeginFadeOut => currentTargetWeight <= k_weightEpsilon,
-                        Type.EndFadeOut => currentTargetWeight <= k_weightEpsilon && currentWeight <= k_weightEpsilon,
+                        Type.BeginFadeOut => /*deltaWeight < 0, // TODO: More robust way? Animancers weights are giving me weird values that don't work reliably primarily for this case so this is a workaround //*/
+                            currentTargetWeight <= k_weightEpsilon || !State.IsActive,//currentTargetWeight <= k_weightEpsilon && currentWeight >= k_weightEpsilon,
+                        Type.EndFadeOut => /*currentTargetWeight <= k_weightEpsilon &&*/ currentWeight <= k_weightEpsilon || !State.IsActive,
                         _ => false
                     };
+                    
+                    /*if (EventType == Type.BeginFadeOut && State.DebugName.ToString().Contains("wall", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        Debug.Log($"[AnimEventBinder]: {Time.time:F2} IsActive Updatable Target Weight: {currentTargetWeight} | Weight: {currentWeight} | deltaWeight: {deltaWeight} | ShouldInvoke? {shouldInvoke}");
+                    }*/
 
                     if (shouldInvoke)
                     {
@@ -128,6 +172,7 @@ namespace FS.Animation
                     {
                         Type.BeginFadeIn or Type.EndFadeIn => 
                             m_previousTargetWeight <= k_weightEpsilon && currentTargetWeight > k_weightEpsilon,
+                        /*Type.BeginFadeOut => deltaWeight >= 0, // TODO: Similar workaround to above case*/
                         Type.BeginFadeOut or Type.EndFadeOut => 
                             m_previousTargetWeight > k_weightEpsilon && currentTargetWeight <= k_weightEpsilon,
                         _ => false
@@ -135,9 +180,15 @@ namespace FS.Animation
             
                     if (shouldReactivate)
                         IsActive = true;
+                    
+                    /*if (EventType == Type.BeginFadeOut && State.DebugName.ToString().Contains("wall", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        Debug.Log($"[AnimEventBinder]: {Time.time:F2} ShouldReactivate Updatable Target Weight: {currentTargetWeight} | Weight: {currentWeight} | deltaWeight: {deltaWeight} | ShouldInvoke? {shouldReactivate}");
+                    }*/
                 }
         
                 m_previousTargetWeight = currentTargetWeight;
+                //m_previousWeight = currentWeight;
             }
         }
         

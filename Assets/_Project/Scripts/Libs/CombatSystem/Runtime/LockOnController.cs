@@ -126,8 +126,7 @@ namespace FS.CombatSystem
 
         protected void TryCycleLockOnTargets()
         {
-            //var dirBias = m_input.GetButton(GameInput.)
-            //m_lockOnSettings.PeformTargeting(gameObject, out m_currentTarget, m_currentTarget.Target ? m_currentTarget.Target.gameObject : null);
+            //m_lockOnSettings.PeformTargeting()
         }
         
         public void AllowLockOn() => m_isLockOnAllowed = true;

@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Profiling;
 
 [RequireComponent(typeof(CharacterActor))]
+[Icon("PhysicsController Icon")]
 public partial class PhysicsController : MonoBehaviour
 {
     [SerializeField] private CharacterActor m_motor;
@@ -296,7 +297,7 @@ public partial class PhysicsController : MonoBehaviour
             // Slow down quickly
             float prevVerticalSpeed = VerticalSpeed;
             VerticalSpeed = Mathf.MoveTowards(VerticalSpeed, maxRiseSpeed, riseDeceleration * Time.deltaTime);
-            Debug.LogError($"Decelerated By {prevVerticalSpeed - VerticalSpeed}");
+            //Debug.LogError($"Decelerated By {prevVerticalSpeed - VerticalSpeed}");
         }
     }
     

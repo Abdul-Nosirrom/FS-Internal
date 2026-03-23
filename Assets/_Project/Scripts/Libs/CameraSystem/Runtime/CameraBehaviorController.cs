@@ -12,6 +12,7 @@ namespace FS.CameraSystem
     /// Base class responsible for controlling player camera state, primarily for updating <see cref="CameraBehavior"/> that
     /// have been added to this camera. Configures the base camera-orbit parameters as well that can be later modified by behaviors
     /// </summary>
+    [Icon("CameraController Icon")]
     public abstract partial class CameraBehaviorController : MonoBehaviour
     {
         #region Default Camera State

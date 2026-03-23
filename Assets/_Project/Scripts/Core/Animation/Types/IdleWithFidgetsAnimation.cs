@@ -15,7 +15,7 @@ public class IdleWithFidgetsAnimation : IdleAnimation
     
     public FSAnimationClip RandomFidget => Fidgets[Random.Range(0, Fidgets.Length)];
 
-    public override AnimancerState Play(AnimancerComponent animator)
+    public override AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1)
     {
         if (!animator) return null;
         if (!HasValidClips())
@@ -49,7 +49,8 @@ public class IdleWithFidgetsAnimation : IdleAnimation
         
 
         // First time playing prolly so we don't need to worry about the fidget order as above
-        var baseState = animator.Layers[(int)Layer].Play(this);
+        fadeDuration = fadeDuration >= 0 ?  fadeDuration : FadeDuration;
+        var baseState = animator.Layers[(int)Layer].Play(this, fadeDuration);
 
         if (baseState.Events(animator, out var parentEvents))
         {

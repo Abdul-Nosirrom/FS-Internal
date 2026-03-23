@@ -2,19 +2,17 @@
 using Drawing;
 using FS.Attributes;
 using FS.Math;
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 #if UNITY_EDITOR
-using Sirenix.OdinInspector.Editor;
 using UnityEditor;
 #endif
 
 [Experimental]
-[ExecuteAlways]
+[RequireComponent(typeof(Rigidbody))]
 public class RotateObject : MonoBehaviourGizmos
 {
-    private Rigidbody m_rigidbody;
+    public Rigidbody m_rigidbody;
     
     public float m_angularSpeed = 10f;
     
@@ -28,27 +26,9 @@ public class RotateObject : MonoBehaviourGizmos
     /// </summary>
     public Vector3 m_rotationAxis = Vector3.up;
 
-#if UNITY_EDITOR    
-    [ShowInInspector] private bool m_editorPreview = false;
-    private Vector3 m_previewStartPos;
-    private Quaternion m_previewStartRot;
-    [Button(DirtyOnClick = false, Icon = SdfIconType.Play)]
-    private void TogglePreview()
-    {
-        m_editorPreview = !m_editorPreview;
-        if (m_editorPreview)
-        {
-            m_previewStartPos = transform.position;
-            m_previewStartRot = transform.rotation;
-        }
-        else
-            transform.SetPositionAndRotation(m_previewStartPos, m_previewStartRot);
-    }
-#endif    
-
     private void Awake()
     {
-        m_rigidbody = GetComponent<Rigidbody>();
+        if (m_rigidbody == null) m_rigidbody = GetComponent<Rigidbody>();
 
         if (m_rigidbody)
         {
@@ -57,31 +37,20 @@ public class RotateObject : MonoBehaviourGizmos
         }
     }
 
-    private void Update()
+    private void FixedUpdate()
     {
-#if UNITY_EDITOR
-        if (!Application.isPlaying && !m_editorPreview) return;
-#endif        
-        
         var worldSpacePivot = transform.TransformPoint(m_pivot);
         var worldSpaceAxis = transform.TransformDirection(m_rotationAxis).normalized;
     
-        var deltaRotation = Quaternion.AngleAxis(m_angularSpeed * Time.deltaTime, worldSpaceAxis);
-        var targetRotation = deltaRotation * transform.rotation;
+        var deltaRotation = Quaternion.AngleAxis(m_angularSpeed * Time.fixedDeltaTime, worldSpaceAxis);
+        var targetRotation = deltaRotation * m_rigidbody.rotation;
     
         // Rotate the offset by the delta rotation, not the target rotation
-        var pivotOffset = transform.position - worldSpacePivot;
+        var pivotOffset = m_rigidbody.position - worldSpacePivot;
         var rotatedOffset = deltaRotation * pivotOffset;
-
-        if (m_rigidbody && Application.isPlaying)
-        {
-            m_rigidbody.MovePosition(worldSpacePivot + rotatedOffset);
-            m_rigidbody.MoveRotation(targetRotation);
-        }
-        else
-        {
-            transform.SetPositionAndRotation(worldSpacePivot + rotatedOffset, targetRotation);
-        }
+    
+        m_rigidbody.MovePosition(worldSpacePivot + rotatedOffset);
+        m_rigidbody.MoveRotation(targetRotation);
     }
     
 #if UNITY_EDITOR
@@ -104,12 +73,11 @@ public class RotateObject : MonoBehaviourGizmos
 
 #if UNITY_EDITOR
 [UnityEditor.CustomEditor(typeof(RotateObject))]
-public class RotateObjectEditor : OdinEditor
+public class RotateObjectEditor : UnityEditor.Editor
 {
     private RotateObject m_target;
-    protected override void OnEnable()
+    private void OnEnable()
     {
-        base.OnEnable();
         m_target = (RotateObject)target;
     }
 

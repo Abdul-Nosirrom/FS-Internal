@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using FMOD.Studio;
 using FS.Audio;
 using FS.GameplayActions;
+using FS.Rendering;
+using Sirenix.OdinInspector;
 using UnityEngine;
 
 public class PlayerAudioEffects : MonoBehaviour
@@ -12,10 +14,14 @@ public class PlayerAudioEffects : MonoBehaviour
     public AudioElement JumpSFX;
     public AudioElement RailGrindSFX;
 
+    [SerializeField] private VFXController m_railGrindVFX_LeftFoot;
+    [SerializeField] private VFXController m_railGrindVFX_RightFoot;
+
     private AudioHandle m_railGrindSFXHandle;
     
     private void Awake()
     {
+        
         var ac = GetComponentInParent<ActionController>();
         if (ac != null)
         {
@@ -66,6 +72,18 @@ public class PlayerAudioEffects : MonoBehaviour
                 m_railGrindSFXHandle.SetParameter(m_railSpeedParam);
             }
         }
+
+        if (m_railGrindVFX_LeftFoot.IsActive || m_railGrindVFX_RightFoot.IsActive)
+        {
+            if (!m_railGrind.IsActive) StopRailGrindVFX();
+            else
+            {
+                // Update rail vfx rotation
+                var rot = Quaternion.LookRotation(-transform.forward, transform.up);
+                m_railGrindVFX_LeftFoot.transform.rotation = rot;
+                m_railGrindVFX_RightFoot.transform.rotation = rot;
+            }
+        }
     }
 
     private void BindPhysicsEvents(PhysicsController physics)
@@ -93,6 +111,7 @@ public class PlayerAudioEffects : MonoBehaviour
     
     private void OnRailGrindEnded(GameplayAction obj)
     {
+        StopRailGrindVFX();
         if (m_railGrindSFXHandle is {IsPlaying: true}) m_railGrindSFXHandle.Stop(STOP_MODE.ALLOWFADEOUT);
     }
     
@@ -103,8 +122,24 @@ public class PlayerAudioEffects : MonoBehaviour
             if (m_railGrindSFXHandle is { IsPlaying: true }) m_railGrindSFXHandle.Stop();
             m_railGrindSFXHandle = AudioManager.CreateAudioInstance(RailGrindSFX, true);
             AudioManager.AttachAudioInstance(m_railGrindSFXHandle, gameObject);
+            PlayRailGrindVFX();
         }
-        else if (m_railGrindSFXHandle is {IsValid: true})
+        else if (m_railGrindSFXHandle is { IsValid: true })
+        {
             m_railGrindSFXHandle.Stop(STOP_MODE.ALLOWFADEOUT);
+            StopRailGrindVFX();
+        }
+    }
+
+    private void PlayRailGrindVFX()
+    {
+        m_railGrindVFX_LeftFoot.Play();
+        m_railGrindVFX_RightFoot.Play();
+    }
+
+    private void StopRailGrindVFX()
+    {
+        m_railGrindVFX_LeftFoot.Stop();
+        m_railGrindVFX_RightFoot.Stop();
     }
 }

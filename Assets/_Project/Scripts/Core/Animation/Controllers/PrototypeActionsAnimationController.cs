@@ -1,5 +1,7 @@
 ﻿using System;
+using Animancer;
 using FS.Animation;
+using UnityEditor;
 using UnityEngine;
 
 [Serializable]
@@ -22,6 +24,9 @@ public class ActionsAnimationSet : AnimationSet
 
     // Railgrind setup
     public MecanimAnimationAsset RailGrind;
+
+    // Wallslide
+    public MecanimAnimationAsset WallSlide;
 }
     
 public class PrototypeActionsAnimationController : AnimationController
@@ -50,6 +55,17 @@ public class PrototypeActionsAnimationController : AnimationController
             m_actionsSet.HomingAttackEnemyBounce.Stop(Animator);
             m_actionsSet.SpringKickWallEject.Stop(Animator);
             m_actionsSet.SpringLegsDashLoop.Stop(Animator);
+        }
+        
+        // Check if we should stop the wallslide anim
+        if (m_actionsSet.WallSlide.GetState(Animator) is ControllerState wallSlideState)
+        {
+            if (m_physics.State == PhysicsState.Air)
+            {
+                // Stop the anim if we're not in the 'jump' state
+                if (!wallSlideState.GetCurrentAnimatorStateInfo().IsName("Jump")) m_actionsSet.WallSlide.Stop(Animator);
+            }
+            else if (m_physics.State != PhysicsState.WallSlide) m_actionsSet.WallSlide.Stop(Animator);
         }
     }
 }

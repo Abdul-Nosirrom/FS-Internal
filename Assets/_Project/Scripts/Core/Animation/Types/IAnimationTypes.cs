@@ -1,7 +1,10 @@
 ﻿
 using Animancer;
 
-public interface IMecanimGenericAnimation : ILocomotionAnimation, IIdleAnimation, IAirIdleAnimation {}
+public interface IMecanimGenericAnimation : ILocomotionAnimation, IIdleAnimation, IAirIdleAnimation 
+{
+    public void UpdatePhysics(AnimancerState state, PhysicsController physics);    
+}
 
 public interface ILocomotionAnimation
 {

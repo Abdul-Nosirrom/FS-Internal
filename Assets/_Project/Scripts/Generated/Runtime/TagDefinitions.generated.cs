@@ -131,6 +131,16 @@ namespace FS.TagSystem
                 public Tag TrickEnd => _internal_TrickEnd;
                 public const string TrickEnd_Path = "Animation.RailGrind.TrickEnd";
 
+                /// <summary>When the zipgrind transition (to or back) is over and we've returned to regular orientation</summary>
+                private static readonly Tag _internal_ZipTransitionEnd = new("Animation.RailGrind.ZipTransitionEnd");
+                public Tag ZipTransitionEnd => _internal_ZipTransitionEnd;
+                public const string ZipTransitionEnd_Path = "Animation.RailGrind.ZipTransitionEnd";
+
+                /// <summary>When the zipgrind dodge is over and we can trigger another dodge</summary>
+                private static readonly Tag _internal_ZipDodgeEnd = new("Animation.RailGrind.ZipDodgeEnd");
+                public Tag ZipDodgeEnd => _internal_ZipDodgeEnd;
+                public const string ZipDodgeEnd_Path = "Animation.RailGrind.ZipDodgeEnd";
+
             }
 
         }

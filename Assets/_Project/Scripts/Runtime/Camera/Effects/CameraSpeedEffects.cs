@@ -24,7 +24,7 @@ public class CameraHoldPosition : CameraFX
 
     public override void OnUpdateFX()
     {
-        float HOLD_DURATION = 0.2f;
+        float HOLD_DURATION = 0.1f;
         float SNAP_BACK_DURATION = 0.3f;
         if (TimeSinceStarted < HOLD_DURATION)
         {

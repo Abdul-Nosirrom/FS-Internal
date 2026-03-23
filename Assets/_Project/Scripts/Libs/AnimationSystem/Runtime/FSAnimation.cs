@@ -23,7 +23,7 @@ namespace FS.Animation
         public abstract AnimationEventHolder GetEventsFor(int childIdx);
         public abstract bool HasValidClips();
         
-        public virtual AnimancerState Play(AnimancerComponent animator)
+        public virtual AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1)
         {
             if (!animator) return null;
             if (!HasValidClips())
@@ -31,7 +31,8 @@ namespace FS.Animation
                 return null;
             }
 
-            var state = animator.Layers[(int)Layer].Play(this);//GetTransition());
+            fadeDuration = fadeDuration >= 0 ? fadeDuration : FadeDuration;
+            var state = animator.Layers[(int)Layer].Play(this, fadeDuration);//GetTransition());
             
             if (state == null) return null;
 
@@ -52,7 +53,7 @@ namespace FS.Animation
             return state;
         }
 
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer) => Play(animator);
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1) => Play(animator, fadeDuration);
 
         public override AnimancerState CreateState()
         {

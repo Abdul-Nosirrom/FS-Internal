@@ -4,6 +4,8 @@ using UnityEngine;
 namespace FS.Animation
 {
     // TODO: I dont think we handle blend-trees well at all, not sure if its possible?
+    // TODO: We cant reliably know when the mecanim state enters/exits (the controller state sure, but if we've got state machines and shit we cant i dont think?)
+    // TODO: Can we use the overload for the state functions that takes in a PlayableAnimatorController? Would it allow us to fetch a ref to the RuntimeAnimatorController to avoid the OnValidate serialization here?
     public class MecanimAnimationEvents : StateMachineBehaviour
     {
         private enum EventExecutionState
@@ -14,42 +16,72 @@ namespace FS.Animation
         }
         
         [SerializeField] private AnimationEventHolder m_animEvents;
+      
+        /// <summary>
+        /// Runtime animation controller reference needed for ControllerState registration to invoke end events if a fade out happens early
+        /// </summary>
+        [SerializeField, HideInInspector] private RuntimeAnimatorController m_ownerController;
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            var path = UnityEditor.AssetDatabase.GetAssetPath(this);
+            var controller = UnityEditor.AssetDatabase.LoadMainAssetAtPath(path) as RuntimeAnimatorController;
+            if (controller != null && m_ownerController != controller)
+            {
+                m_ownerController = controller;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+        }
+#endif
 
         private Dictionary<FSAnimationEvent, EventExecutionState> m_eventTriggerState = new();
+        private Animator m_animator;
         private GameObject m_ownerObject;
         private bool m_isLooping;
 
-        // TODO: We cant reliably know when the mecanim state enters/exits (the controller state sure, but if we've got state machines and shit we cant i dont think?)
-        // public void Initialize(GameObject owner, ControllerState state)
-        // {
-        //     m_ownerObject = owner;
-        //     
-        //     state.BindPlaybackEvent(InitializeEventState, AnimationPlaybackEventManager.Type.BeginFadeIn);
-        //     state.BindPlaybackEvent(TryTriggerEndEvents, AnimationPlaybackEventManager.Type.BeginFadeOut);
-        //     
-        //     InitializeEventState();
-        // }
-        //
+        
         private void InitializeEventState()
         {
             m_eventTriggerState.Clear();
             foreach (var animEvent in m_animEvents.Events) m_eventTriggerState.Add(animEvent, EventExecutionState.NotStarted);
         }
-        //
-        // private void TryTriggerEndEvents() => OnStateExit(null, default, 0);
+
+        private bool m_wasFadeOutConsumed = true;
+
+        private void BindToControllerStateFadeOut(Animator animator)
+        {
+            // Register to a global/static buffer so that the underlying AnimancerState knows to call OnStateEnd
+            if (MecanimAnimation.TryGetRegisteredControllerState(animator, m_ownerController, out var controllerState))
+            {
+                if (m_wasFadeOutConsumed) // Only bind once, given that this is "Whole ass controller is fading out" so state re-entry can rebind
+                {
+                    m_wasFadeOutConsumed = false;
+                    controllerState.OnFadedOut(() => // TODO: IDEALLY WOULD USE ONFADEOUT BUT ITS BROKEN CHECK @AnimationPlaybackEvents.cs
+                    {
+                        CompleteCurrentCycle();
+                        m_wasFadeOutConsumed = true;
+                    });
+                }
+            }
+        }
 
         private float GetNormalizedTime(AnimatorStateInfo stateInfo)
         {
             if (stateInfo.loop) return stateInfo.normalizedTime % 1f;
-            return Mathf.Clamp01(stateInfo.normalizedTime);
+            return stateInfo.normalizedTime;//Mathf.Clamp01(stateInfo.normalizedTime);
         }
-        
+
         public override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
+            m_animator = animator;
             m_ownerObject = animator.gameObject;
             m_prevNormTime = GetNormalizedTime(stateInfo); // Initialize previous normalized time
 
             InitializeEventState();
+            BindToControllerStateFadeOut(animator);
+
+            m_isLooping = stateInfo.loop;
             
             // Trigger all 'start' events
             foreach (var animEvent in m_animEvents.Events) TryExecuteEvent(animEvent, 0);
@@ -59,13 +91,28 @@ namespace FS.Animation
         public override void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
             float normalizedTime = GetNormalizedTime(stateInfo);
+            
+            // Fetch controller-state and check if it's fading out, just a safety check as the FadedOut binding wont invoke
+            // if we fade out same frame we bind, it'll wait till the next invocation
+            if (MecanimAnimation.TryGetRegisteredControllerState(m_animator, m_ownerController, out var cState))
+            {
+                float targetWeight = cState.TargetWeight * cState.Layer.TargetWeight;
+                if (targetWeight < 1)
+                {
+                    CompleteCurrentCycle();
+                    m_prevNormTime = normalizedTime;
+                    return;
+                }
+            }
+            
             // Reset triger states if we looped
             if (normalizedTime < m_prevNormTime && stateInfo.loop)
             {
                 CompleteCurrentCycle(); // Call exit events
                 foreach (var animEvent in m_animEvents.Events) TryExecuteEvent(animEvent, 0); // call start events
             }
-            else
+            // Can be cross-fading out but normalized time is still updating: Happens in a case of a state w/ no explicit transitions so it lingers. End is called, resetting it
+            else if (normalizedTime <= 1 && m_prevNormTime <= 1) // For loops, this'll always be true. Just for non-looping during cross-fades we don't clamp to detect this (FadeOut can call CompleteCycle, resetting states, then same frame instantly invoked)
             {
                 foreach (var animEvent in m_animEvents.Events) TryExecuteEvent(animEvent, normalizedTime);
             }
@@ -75,18 +122,18 @@ namespace FS.Animation
 
         public override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
-            CompleteCurrentCycle();
+            CompleteCurrentCycle(); // True here causes no events to fire for some reason, this is same as old behavior, true is fine for fade out call
         }
 
         /// <summary>
         /// Fires any remaining events at time=1 and resets state.
         /// Used both for loop boundaries and actual state exit.
         ///
-        /// Wanna figure out a way to call this when the MecanimAnimation fades out for any active states
+        /// We handle MecanimAnimation fadeout cleaning up events by having a static registry for controller state references,
+        /// and fetching them early on to bind to their fade out events so all internal AnimationController states get cleaned up properly.
         /// </summary>
         private void CompleteCurrentCycle()
         {
-            // NOTE: This doesn't properly trigger events if we exit the MecanimAnimation
             foreach (var animEvent in m_animEvents.Events)
             {
                 if (m_eventTriggerState[animEvent] == EventExecutionState.Executing)
@@ -99,7 +146,13 @@ namespace FS.Animation
         
         private void TryExecuteEvent(FSAnimationEvent animEvent, float normalizedTime)
         {
-            var eventState = m_eventTriggerState[animEvent];
+            if (!m_eventTriggerState.TryGetValue(animEvent, out var eventState) && normalizedTime < 1)
+            {
+                // OnStateUpdate fired without OnStateEnter — reinitialize
+                InitializeEventState();
+                eventState = m_eventTriggerState[animEvent];
+            }
+            
             float start = animEvent.TimeRange.x;
             float end = animEvent.TimeRange.y;
             float triggerTime = animEvent.IsRangedEvent ? start : animEvent.Time;
@@ -110,6 +163,8 @@ namespace FS.Animation
             switch (eventState)
             {
                 case EventExecutionState.NotStarted:
+                    //if (animEvent.Event.Name.Contains("vfx_Wall"))
+                    //    Debug.Log($"[Mecanim] Starting VFX! t_cur={normalizedTime:F2} | t_prev={m_prevNormTime:F2}");
                     if (normalizedTime >= triggerTime)
                     {
                         if (animEvent.IsRangedEvent)
@@ -130,10 +185,10 @@ namespace FS.Animation
                     }
                     break;
                 case EventExecutionState.Executing: // Guaranteed range event
-                    //if (normalizedTime < end) // NOTE: We don't execute "Excecute" continuously for ranged events
-                    //    animEvent.Execute(m_ownerObject, normalizedEventTime);
-                    //else
+                    if (normalizedTime >= end)
                     {
+                        //if (animEvent.Event.Name.Contains("vfx_Wall"))
+                        //    Debug.Log($"[Mecanim] Ending VFX! t_cur={normalizedTime:F2} | t_prev={m_prevNormTime:F2}");
                         animEvent.End(m_ownerObject);
                         m_eventTriggerState[animEvent] = EventExecutionState.Completed;
                     }

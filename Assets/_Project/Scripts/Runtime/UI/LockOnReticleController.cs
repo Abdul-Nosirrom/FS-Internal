@@ -24,6 +24,7 @@ public class LockOnReticleController : MonoBehaviour
     private HUDElement m_acidDropInteractionNote;
     private LockOnController m_lockOnController;
     private SpringKick m_springKick;
+    private MeteorPunch m_meteorPunch;
     private AcidDropAction m_acidDrop;
     
     private IEnumerator Start()
@@ -34,6 +35,7 @@ public class LockOnReticleController : MonoBehaviour
         m_lockOnController = GetComponentInChildren<LockOnController>();
         
         m_springKick = GetComponentInChildren<SpringKick>();
+        m_meteorPunch = GetComponentInChildren<MeteorPunch>();
         m_acidDrop = GetComponentInChildren<AcidDropAction>();
         
         if (m_hud == null)
@@ -90,7 +92,17 @@ public class LockOnReticleController : MonoBehaviour
             targetChanged = target != m_lockOnReticle.WorldTarget;
         }
 
+        // Spring kick homing
         if (m_springKick && m_springKick.CanStartAction() && !targetFound)
+        {
+            targetFound = m_springKick.m_homingAttackTargetingSettings.PeformTargeting(gameObject, out var result);
+            targetChanged = targetFound && result.Target.transform != m_lockOnReticle.WorldTarget;
+            if (targetFound) target = result.Target.transform;
+        }
+        
+        // Meteor Punch homing
+        if (!m_meteorPunch) m_meteorPunch = GetComponentInChildren<MeteorPunch>(); // Why?
+        if (m_meteorPunch && m_meteorPunch.CanStartAction() && !targetFound)
         {
             targetFound = m_springKick.m_homingAttackTargetingSettings.PeformTargeting(gameObject, out var result);
             targetChanged = targetFound && result.Target.transform != m_lockOnReticle.WorldTarget;

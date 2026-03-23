@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Animancer;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -22,56 +23,37 @@ namespace FS.Animation
         [SerializeField] private bool m_hasNormalizedStartTime = false;
         [SerializeField, Range(0, 1), ShowIf("m_hasNormalizedStartTime")] 
         private float m_normalizedStartTime = 0;
-
-        // TODO: I think for MecanimAnimations, events should be done with an animationstate script on the anim controller, dont think i can do it well in here!
-        //[SerializeField] private SerializableDictionary<AnimationClip, List<FSAnimationEvent>> m_clipEvents;
-        
-        //[SerializeField] 
-        //private List<FSAnimationEvent> m_events; // TODO: Make a wrapper for list of events & use timeline editor for it
-        //public FSAnimationEvent[] AnimationEvents => m_events.ToArray();
         
         [SerializeField, HideInInspector] 
         private ControllerTransition m_transition = new();
 
-        // public void ValidateEvents()
-        // {
-        //     if (m_animController == null) return;
-        //     
-        //     // Ensure clipEvents match up with clips on the controller
-        //     var clips = m_animController.animationClips.ToHashSet();
-        //     foreach (var clip in clips)
-        //     {
-        //         if (m_clipEvents.ContainsKey(clip)) continue;
-        //         m_clipEvents[clip] = new();
-        //     }
-        //     
-        //     // Check any missing shit
-        //     var storedClips = m_clipEvents.Keys;
-        //     foreach (var storedClip in storedClips)
-        //     {
-        //         if (clips.Contains(storedClip)) continue;
-        //         if (!clips.Contains(storedClip))
-        //         {
-        //             // There's a mismatch, remove this
-        //             m_clipEvents.Remove(storedClip);
-        //         }
-        //     }
-        // }
+        // annoyingly public just so the asset can reference it too to register
+        public static Dictionary<(Animator, RuntimeAnimatorController), ControllerState> s_activeControllerStates = new();
         
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void StaticReset() => s_activeControllerStates.Clear();
+
+        public static bool TryGetRegisteredControllerState(Animator animator, RuntimeAnimatorController animController,
+            out ControllerState state) => s_activeControllerStates.TryGetValue((animator, animController), out state);
+
 #if UNITY_EDITOR
         public ControllerState editor_recentlyPlayedState;
 #endif        
 
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer)
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1)
         {
             if (!animator) return null;
 
             // For Mecanim animations, events are placed on the anim controller and get manually invoked
-            ControllerState state = (ControllerState)animator.Layers[(int)layer].Play(this);
+            fadeDuration = fadeDuration >= 0 ? fadeDuration : m_fadeDuration;
+            ControllerState state = (ControllerState)animator.Layers[(int)layer].Play(this, fadeDuration);
+            
+            // Register it, so that MecanimAnimationEvents can later properly bind to FadeOut to clear its pending ranged events
+            s_activeControllerStates[(animator.Animator, m_animController)] = state;
             
             return state;
         }
-        public AnimancerState Play(AnimancerComponent animator) => Play(animator, 0);
+        public AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1) => Play(animator, 0, fadeDuration);
         
         
         public ITransition GetTransition()

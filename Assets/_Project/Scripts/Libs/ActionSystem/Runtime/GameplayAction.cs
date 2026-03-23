@@ -40,6 +40,7 @@ namespace FS.GameplayActions
     /// Small organized isolated class for gameplay actions that can be granted to an owner of any type (usually an ActionController,
     /// but that is not enforced).
     /// </summary>
+    [Icon("GameplayAction Icon")]
     public abstract class GameplayAction : MonoBehaviour
     {
         /// <summary>

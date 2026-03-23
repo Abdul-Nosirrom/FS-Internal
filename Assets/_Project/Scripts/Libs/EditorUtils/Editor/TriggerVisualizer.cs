@@ -155,6 +155,22 @@ namespace FS.Editor
             Profiler.EndSample();
         }
         
+        [DrawGizmo(GizmoType.Selected | GizmoType.NonSelected | GizmoType.Pickable)]
+        private static void OnMeshColliderColliderGizmo(MeshCollider mesh, GizmoType type)
+        {
+            if (!mesh.isTrigger) return;
+            Profiler.BeginSample("TriggerGizmo");
+
+            Vector3 pos = mesh.transform.position;
+            Vector3 scale = mesh.transform.lossyScale;
+
+            float insideShapeSign = 1;
+            Matrix4x4 matrix = Matrix4x4.TRS(pos, mesh.transform.rotation, scale);
+            
+            DrawTriggerVisualizer(mesh.sharedMesh, matrix, insideShapeSign, 5);
+            Profiler.EndSample();
+        }
+        
         private static void DrawTriggerVisualizer(Mesh mesh, Matrix4x4 matrix, float insideShapeSign, int shapeType)
         {
             s_vizMaterial.SetInteger(k_shapeTypeParam, shapeType);

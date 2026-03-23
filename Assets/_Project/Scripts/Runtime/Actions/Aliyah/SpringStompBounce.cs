@@ -1,5 +1,4 @@
-﻿using System;
-using FS.GameplayActions;
+﻿using FS.GameplayActions;
 using FS.Math;
 using FS.Player;
 using PrimeTween;
@@ -50,8 +49,7 @@ public class SpringStompBounce : GameplayAction, IActionPhysicsReciever
 
     public void OnFoundGround()
     {
-        Debug.LogError($"[Spring Bounce] Found input on grounding? {m_inputReleased}. Time Held: {m_input.TimeHeld(StompInput)}. Released This Frame: {m_input.GetButtonRelease(StompInput)}");
-        if (m_inputReleased || true)// NOTE: Release is acting weird, doesnt flag until a few frames in
+        if (true || m_inputReleased)
         {
             // if (m_physics.Ground.CompareLayer(PhysicsLayers.Vert) && m_physics.Ground.GroundSlopeAngle > 30f)
             // {
@@ -80,7 +78,7 @@ public class SpringStompBounce : GameplayAction, IActionPhysicsReciever
         }
         else
         {
-            //m_physics.Velocity = Vector3.zero;
+            m_physics.Velocity = Vector3.zero;
             m_state = StompState.StompLand;
             EndAction();
         }
@@ -88,8 +86,8 @@ public class SpringStompBounce : GameplayAction, IActionPhysicsReciever
 
     public void UpdateVelocity()
     {
-        m_inputReleased |= m_input.GetButtonRelease(StompInput);
-        
+        m_inputReleased = m_inputReleased || m_input.GetButtonRelease(StompInput);
+
         if (m_state == StompState.Bounce)
         {
             if (m_sinceBounced > 0.1f) EndAction();

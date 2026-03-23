@@ -33,17 +33,18 @@ namespace FS.Animation
         [SerializeField, HideInInspector] 
         private ClipTransition m_transition = new();
 
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer)
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1)
         {
             if (!animator) return null;
             
-            AnimancerState state = animator.Layers[(int)layer].Play(this);
+            fadeDuration = fadeDuration >= 0 ? fadeDuration : m_fadeDuration;
+            AnimancerState state = animator.Layers[(int)layer].Play(this, fadeDuration);
             if (state.Events(animator, out var events))
                 m_animEvents?.Bind(animator, state, events);
             
             return state;
         }
-        public AnimancerState Play(AnimancerComponent animator) => Play(animator, 0);
+        public AnimancerState Play(AnimancerComponent animator, float fadeDuration) => Play(animator, layer: 0, fadeDuration: fadeDuration);
         
         
         public ITransition GetTransition()

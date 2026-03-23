@@ -18,8 +18,8 @@ namespace FS.Animation
     /// </summary>
     public interface IAnimation : ITransition
     {
-        public AnimancerState Play(AnimancerComponent animator);
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer);
+        public AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1);
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1);
 
         public ITransition GetTransition();
 
@@ -99,7 +99,7 @@ namespace FS.Animation
 
         public static bool Stop(this IAnimation animation, FSAnimator animator, float fadeDuration = 0.1f)
         {
-            if (animation.TryGetState(animator, out var state) && state.IsActive)
+            if (animation.TryGetState(animator, out var state) && state.IsActive && state.TargetWeight > 0 && state.Layer.TargetWeight > 0)
             {
                 if (state.LayerIndex > 0) return animation.FadeOutLayer(animator, fadeDuration);
                 state.StartFade(0, fadeDuration);
@@ -140,8 +140,8 @@ namespace FS.Animation
 
         public TInterface Value => m_animation as TInterface;
         
-        public AnimancerState Play(AnimancerComponent animator) => m_animation?.Play(animator);
-        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer) => m_animation?.Play(animator);
+        public AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1) => m_animation?.Play(animator, fadeDuration);
+        public AnimancerState Play(AnimancerComponent animator, FSAnimationLayer layer, float fadeDuration = -1) => m_animation?.Play(animator, fadeDuration);
         
         public ITransition GetTransition() => m_animation?.GetTransition();
     }
@@ -212,14 +212,15 @@ namespace FS.Animation
             selector.SelectionConfirmed += (selection) =>
             {
                 if (selection == null) return;
-                
+    
                 FSAnimation anim = selection.FirstOrDefault();
-                
-                var value = ValueEntry.SmartValue;
-                
+    
                 Property.RecordForUndo("Animation Assignment");
-                value.m_animation = anim;
-                ValueEntry.SmartValue = value;
+    
+                // Set through the child property so Odin detects the change
+                var animProp = Property.Children["m_animation"];
+                animProp.ValueEntry.WeakSmartValue = anim;
+    
                 ValueEntry.Property.MarkSerializationRootDirty();
             };
 

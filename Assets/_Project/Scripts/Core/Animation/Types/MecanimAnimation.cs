@@ -14,6 +14,7 @@ namespace FS.Animation
             public const string Speed = "Speed";
             public const string VerticalSpeed = "VerticalSpeed";
             public const string LateralSpeed = "LateralSpeed";
+            public const string IsGrounded = "IsGrounded";
         }
 
         [SerializeField, Tooltip("Destroys the state before playing to ensure Mecanim controller starts from Entry. Disable for performance if state reuse is desired.")]
@@ -22,12 +23,12 @@ namespace FS.Animation
 
         public override ITransition GetTransition() => m_animationController.GetTransition();
 
-        public override AnimancerState Play(AnimancerComponent animator)
+        public override AnimancerState Play(AnimancerComponent animator, float fadeDuration = -1)
         {
             // If a state exists, destroy it first WARNING: THIS IS TEMPORARY FIX FOR ANIMATION CONTROLLERS NOT RESETTING
             if (EnsureResetOnPlay && animator.States.TryGet(this, out var state))
                 state.Destroy();
-            return base.Play(animator);
+            return m_animationController.Play(animator, Layer, fadeDuration);
         }
 
         // these are manually bound
@@ -43,24 +44,30 @@ namespace FS.Animation
         {
             UpdateAnimationParameters((ControllerState)state, physics);
         }
-        
+
+        public void UpdatePhysics(AnimancerState state, PhysicsController physics)
+        {
+            UpdateAnimationParameters((ControllerState)state, physics);
+        }
+
         private void UpdateAnimationParameters(ControllerState state, PhysicsController physics)
         {
             bool skipInterp = state.NormalizedTime <= 0f;
             for (int p = 0; p < state.GetParameterCount(); p++)
             {
                 var param = state.GetParameter(p);
-                var ogValue = state.GetFloat(param.nameHash);
                 switch (param.name)
                 {
                     case Parameters.ForwardLeans:
+                        var forwardLeanInitProp = state.GetFloat(param.nameHash);
                         float forwardLean = AnimationParameterCalculator.CalculateForwardLeans(physics);
-                        if (!skipInterp) forwardLean = Mathf.Lerp(ogValue, forwardLean, 10f * Time.deltaTime);
+                        if (!skipInterp) forwardLean = Mathf.Lerp(forwardLeanInitProp, forwardLean, 10f * Time.deltaTime);
                         state.SetFloat(param.nameHash, forwardLean);
                         break;
                     case Parameters.SideLeans:
                         float sideLean = AnimationParameterCalculator.CalculateSideLeans(physics);
-                        if (!skipInterp) sideLean = Mathf.Lerp(ogValue, sideLean, 4f * Time.deltaTime);
+                        var sideLeanInitProp = state.GetFloat(param.nameHash);
+                        if (!skipInterp) sideLean = Mathf.Lerp(sideLeanInitProp, sideLean, 4f * Time.deltaTime);
                         state.SetFloat(param.nameHash, sideLean);
                         break;
                     case Parameters.Speed:
@@ -73,8 +80,12 @@ namespace FS.Animation
                         break;
                     case Parameters.VerticalSpeed:
                         float verticalSpeed = AnimationParameterCalculator.CalculateVerticalSpeed(physics);
-                        if (!skipInterp) verticalSpeed = Mathf.Lerp(ogValue, verticalSpeed, 5f * Time.deltaTime);
+                        var verticalSpeedInitProp = state.GetFloat(param.nameHash);
+                        if (!skipInterp) verticalSpeed = Mathf.Lerp(verticalSpeedInitProp, verticalSpeed, 5f * Time.deltaTime);
                         state.SetFloat(param.nameHash, verticalSpeed);
+                        break;
+                    case Parameters.IsGrounded:
+                        state.SetBool(param.nameHash, physics.IsGrounded);
                         break;
                 }
             }

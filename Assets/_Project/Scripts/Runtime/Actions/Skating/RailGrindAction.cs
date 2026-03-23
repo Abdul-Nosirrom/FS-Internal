@@ -35,10 +35,14 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     public static readonly int k_animLeanAmount = Animator.StringToHash("LeanAmount");
     public static readonly int k_animRailSpeed = Animator.StringToHash("Speed");
+    
     public static readonly int k_animRailSwapTrigger = Animator.StringToHash("RailSwap");
+    public static readonly int k_animRailSwapDirection = Animator.StringToHash("RailSwapDirection");
     public static readonly int k_animReboundTrigger = Animator.StringToHash("Rebound");
     public static readonly int k_animOrientationState = Animator.StringToHash("OrientationState");
-    public static readonly int k_animRailSwapDirection = Animator.StringToHash("RailSwapDirection");
+    
+    public static readonly int k_animZipGrindDodgeDirection = Animator.StringToHash("ZipDodgeDirection");
+    public static readonly int k_animZipGrindDodgeState = Animator.StringToHash("ZipGrind Dodge");
     
     #endregion
 
@@ -74,10 +78,19 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     [RuntimeData] private GrindState m_state = GrindState.Default;
     [RuntimeData] private OrientationState m_orientationState = OrientationState.Regular;
-    [RuntimeData] private Vector3 m_zipGrindAnimationOffset;
     [RuntimeData] private Vector3 m_initialSwapOffsetVector;
     [RuntimeData] private TimeSince m_sinceSwapStarted;
     [RuntimeData] private TimeSince m_sinceOrientationChanged;
+
+    /// <summary>
+    /// Flag set when we can transition between orientations again, set via animation flags
+    /// </summary>
+    [RuntimeData] private bool m_isStillInZipGrindTransition;
+    /// <summary>
+    /// Flag set when a dodge is complete in zipgrind, signaling we can trigger another dodge
+    /// </summary>
+    [RuntimeData] private bool m_isZipGrindDodgeComplete;
+
 
     #endregion
 
@@ -86,8 +99,6 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     protected RailFeeler m_feeler;
     private SplineFollower m_grindFollower = new SplineFollower();
     private IAnimation m_railAnimation;
-    //private IAnimation m_railTrickAnimation;
-    //private IAnimation m_railSwapAnimation;
     
     #endregion
 
@@ -125,7 +136,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     /// <summary>
     /// Offset from the rail spline position when zip-grinding
     /// </summary>
-    public float ZipGrindVerticalOffset => -m_physics.CapsuleHeight * 1.5f;
+    public float ZipGrindVerticalOffset => -3f;
 
     /// <summary>
     /// Current grinding state (Default, Swap, or Rebound).
@@ -156,10 +167,14 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         get => m_orientationState;
         set
         {
+            if (m_isStillInZipGrindTransition) return; // waiting for flag
             if (value == m_orientationState) return;
             m_orientationState = value;
             m_sinceOrientationChanged = 0;
-            AnimRailState?.SetInteger(k_animOrientationState, (int)m_orientationState);
+            //AnimRailState?.SetInteger(k_animOrientationState, (int)m_orientationState);
+            if (value == OrientationState.Regular) AnimRailState?.CrossFade("Zip To Rail", 0.2f);
+            else AnimRailState?.CrossFade("Rail To Zip", 0.2f);
+            AnimRailState?.OnFlag(m_animator, Tag.Animation.RailGrind.ZipTransitionEnd, () => m_isStillInZipGrindTransition = false);
             OnRailOrientationModeChanged?.Invoke();
         }
     }
@@ -174,7 +189,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     {
         m_feeler = owner.GetComponentInChildren<RailFeeler>();
         m_grindFollower.OnReachedEnd += EndAction;
-
+        
         InitializeAnimations();
     }
 
@@ -220,10 +235,14 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         m_orientationState = m_feeler.RailOrientationState; // TODO: Support starting in zip-grind if top sphere overlap
         
         // Set animation start state
-        AnimRailState?.SetInteger(k_animOrientationState, (int)m_orientationState);
+        //AnimRailState?.SetInteger(k_animOrientationState, (int)m_orientationState); // TODO: Integer isnt respected by animator, something with sub-statemachine transitions i think?
+        
+        if (m_orientationState == OrientationState.Zipline)
+            AnimRailState?.CrossFade("ZipGrind", 0f);
         
         // Cache zip-grind animation offset and accumulate it as we handle our positioning via root motion
-        m_zipGrindAnimationOffset = m_physics.RootMotionDeltaPosition;
+        m_isStillInZipGrindTransition = false;
+        m_isZipGrindDodgeComplete = true;
     }
 
     public override void OnEnd()
@@ -266,7 +285,6 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
                 out m_wallReboundHit, m_physics.CapsuleRadius * 3f, m_physics.CollidableLayers)) return false;
         bool bMovingIntoWall = Vector3.Dot(m_wallReboundHit.normal, m_physics.transform.forward) < 0;
         if (!bMovingIntoWall) return false;
-        Debug.LogWarning($"Wall Hit Dist: {m_wallReboundHit.distance}");
 
         if (State == GrindState.Default)
         {
@@ -289,10 +307,20 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         var railRight = m_grindFollower.Rotation * Vector3.right;
         var leanInput = railRight.Dot(m_physics.MoveInput());
         var currentLeanAmount = AnimRailState?.GetFloat(k_animLeanAmount);
-        leanInput = Mathf.Lerp(currentLeanAmount ?? 0, leanInput, 5f * Time.deltaTime);
-        AnimRailState?.SetFloat(k_animLeanAmount, leanInput); // Can smooth it
+        float smoothedLeanInput = Mathf.Lerp(currentLeanAmount ?? 0, leanInput, 5f * Time.deltaTime);
+        AnimRailState?.SetFloat(k_animLeanAmount, smoothedLeanInput); // Can smooth it
 
         AnimRailState?.SetFloat(k_animRailSpeed, Mathf.InverseLerp(k_minGrindSpeed, k_maxGrindSpeed, Mathf.Abs(m_grindFollower.m_speed)));
+
+        if (GrindOrientation == OrientationState.Zipline && m_isZipGrindDodgeComplete)
+        {
+            const float k_zipGrindDodgeLeanThreshold = 0.4f;
+            if (Mathf.Abs(leanInput) > k_zipGrindDodgeLeanThreshold)
+            {
+                AnimRailState?.SetFloat(k_animZipGrindDodgeDirection, Mathf.Sign(leanInput));
+                AnimRailState?.CrossFade(k_animZipGrindDodgeState, 0f);
+            }
+        }
     }
 
     #endregion
@@ -304,16 +332,13 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         Vector3 fromPos = m_physics.FootPosition;
         Vector3 offsetVector = CalculateTotalOffset();
         //Vector3 constantOffset = -m_grindFollower.Normal * 0.1f;
-        Vector3 targetPoint = m_grindFollower.Position + offsetVector + m_zipGrindAnimationOffset;
+        Vector3 targetPoint = m_grindFollower.Position + offsetVector;
 
         // Calculate alignment interpolation (skip during swap to avoid interference)
         float alignmentT = CalculateAlignmentT();
-        
-        // Accumulate root motion position (only matters if we're in zip-grind
-        m_zipGrindAnimationOffset += m_physics.RootMotionDeltaPosition;
-        m_zipGrindAnimationOffset = Vector3.zero; // NOTE: Temp
 
-        targetPoint = Vector3.Lerp(fromPos, targetPoint, alignmentT);// + offsetVector + m_zipGrindAnimationOffset;
+
+        targetPoint = Vector3.Lerp(fromPos, targetPoint, alignmentT);
         m_physics.FootPosition = targetPoint;
     }
 
@@ -342,13 +367,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
 
     private Vector3 CalculateOrientationOffset()
     {
-        float targetOffset = GrindOrientation == OrientationState.Zipline ? ZipGrindVerticalOffset : 0f;
-        float startOffset = GrindOrientation == OrientationState.Zipline ? 0f : ZipGrindVerticalOffset;
-
-        float t = Mathf.Clamp01(m_sinceOrientationChanged / k_orientationTransitionDuration);
-        float currentOffset = Mathf.Lerp(startOffset, targetOffset, t);
-
-        return Normal * currentOffset;
+        return Quaternion.LookRotation(m_grindFollower.Direction, Normal) * m_physics.RootMotionLocalPosition;
     }
 
     private Vector3 CalculateSwapOffset()
@@ -450,9 +469,16 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
         if (State != GrindState.Default) return;
 
         // Auto-correct if zipline position is blocked
-        if (GrindOrientation == OrientationState.Zipline && !IsZipGrindPositionClear())
+        if (GrindOrientation == OrientationState.Zipline && !IsZipGrindPositionClear(1f))
         {
             GrindOrientation = OrientationState.Regular;
+            return;
+        }
+
+        // TODO: Better handle collision checks between transitions
+        if (GrindOrientation == OrientationState.Regular && !IsZipGrindPositionClear(-1f))
+        {
+            GrindOrientation = OrientationState.Zipline;
             return;
         }
 
@@ -474,7 +500,7 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     private void TryToggleOrientation()
     {
         // Validate we can switch to zipline if currently regular
-        if (GrindOrientation == OrientationState.Regular && !IsZipGrindPositionClear())
+        if (GrindOrientation == OrientationState.Regular && !IsZipGrindPositionClear(1f))
             return;
 
         GrindOrientation = GrindOrientation == OrientationState.Regular 
@@ -487,9 +513,9 @@ public class RailGrindAction : GameplayAction, IActionPhysicsReciever, IActionUp
     /// <summary>
     /// Checks if the zipline hanging position is free of collisions.
     /// </summary>
-    private bool IsZipGrindPositionClear()
+    private bool IsZipGrindPositionClear(float sign)
     {
-        Vector3 queryPos = m_grindFollower.Position + m_grindFollower.Normal * ZipGrindVerticalOffset; // TODO: Use value from orientationOffset getter to have 1 source of truth
+        Vector3 queryPos = m_grindFollower.Position + sign * m_grindFollower.Normal * ZipGrindVerticalOffset; // TODO: Use value from orientationOffset getter to have 1 source of truth
         return !m_physics.CheckCharacterCapsule(queryPos);
     }
 

@@ -38,13 +38,42 @@ Shader "Dev/Blockout"
             "Queue" = "Geometry"
             "TerrainCompatible" = "True"
             "PreviewType" = "Plane"
+            
+            "ShaderGen" = "True"
         }
 
         // =====================================================================
-        // SHARED CODE
+        // FORWARD PASS
         // =====================================================================
-        HLSLINCLUDE
-        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        Pass
+        {
+            Name "BlockoutPass"
+            Tags
+            {
+                "LightMode" = "UniversalForward"
+                "ShaderGen" = "True"
+            }
+
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma vertex Vert
+            #pragma fragment Frag
+            
+            // Material keywords
+            #pragma shader_feature_local _ENABLE_SSR
+
+            #include_with_pragmas "Library/Keywords/ForwardKeywords.hlsl"
+            
+            #ifdef _ADDITIONAL_LIGHTS_VERTEX
+                #define VERTEX_LIGHTS_INTERP half3 vertexLight : TEXCOORD9;
+            #else
+                #define VERTEX_LIGHTS_INTERP
+            #endif
+            
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            
 
         // CBUFFER - identical across all passes for SRP Batcher
         CBUFFER_START(UnityPerMaterial)
@@ -84,22 +113,35 @@ Shader "Dev/Blockout"
         #include "Library/Core/DebugSupport.hlsl"
         #include "Library/Core/Lighting/LightingModels.hlsl"
         #include "Library/Effects.hlsl"
-
-        // #ifndef DEBUG_DISPLAY
-        //     #define DEBUG_DISPLAY
-        // #endif
         
-        #define EXTRA_ATTRIBUTES float4 color : COLOR;
-        #define EXTRA_INTERPOLATORS \
-            float4 color : COLOR;\
-            float3 positionWS : TEXCOORD1;\
-            float3 viewDirWS : TEXCOORD4;
+        struct Attributes
+        {
+            float4 positionOS : POSITION;
+            float2 uv : TEXCOORD0;
+            float3 normalOS : NORMAL;
+            float4 tangentOS : TANGENT;
+            float4 color : COLOR;
+            half3 vertexLight : TEXCOORD7;
+            float2 lightmapUV : TEXCOORD1;
+            UNITY_VERTEX_INPUT_INSTANCE_ID
+        };
         
-        #define TRANSFER_EXTRA(output, input)\
-            output.color = input.color;\
-            output.positionWS = TransformObjectToWorld(input.positionOS);\
-            output.viewDirWS = GetWorldSpaceNormalizeViewDir(output.positionWS);
-        
+        struct Interpolators
+        {
+            float4 positionCS : SV_POSITION;
+            float2 uv : TEXCOORD0;
+            float3 normalWS : NORMAL;
+            float3 tangentWS : TANGENT;
+            float4 color : COLOR;
+            float3 positionWS : POS_WS;
+            float3 viewDirWS : VIEWDIR_WS;
+            
+            half fogFactor : FOG_FACTOR;
+            DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, LIGHTMAP_UV);
+            VERTEX_LIGHTS_INTERP
+            UNITY_VERTEX_INPUT_INSTANCE_ID
+        };
+            
         half GridLinesFactor(float2 uv, float gridSize, float lineWidth)
         {
             float2 gridUV = uv * gridSize;
@@ -114,53 +156,10 @@ Shader "Dev/Blockout"
             
             return saturate(1.0 - lineG) * fadeOut;
         }
-        
-        ENDHLSL
-
-        // =====================================================================
-        // FORWARD PASS
-        // =====================================================================
-        Pass
-        {
-            Name "BlockoutPass"
-            Tags
-            {
-                "LightMode" = "UniversalForward"
-                "TerrainCompatible" = "True"
-            }
-
-            Cull Back
-
-            HLSLPROGRAM
-            #pragma target 4.5
-            #pragma vertex Vert
-            #pragma fragment Frag
-            
-            // Material keywords
-            #pragma shader_feature_local _ENABLE_SSR
-
-            #include_with_pragmas "Library/Keywords/ForwardKeywords.hlsl"
-            
-            #ifdef _ADDITIONAL_LIGHTS_VERTEX
-                #define VERTEX_LIGHTS_INTERP half3 vertexLight : TEXCOORD7;
-            #else
-                #define VERTEX_LIGHTS_INTERP
-            #endif
-            
-            #define PASS_ATTRIBUTES float2 lightmapUV : TEXCOORD1;
-            #define PASS_INTERPOLATORS \
-                half fogFactor : TEXCOORD5;\
-                DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, 6);\
-                VERTEX_LIGHTS_INTERP
-            
-            
-            #define NEEDS_NORMAL
-            #define NEEDS_TANGENT
-            #include "Library/Core/StructBuilder.hlsl"
 
             Interpolators Vert(Attributes input)
             {
-                Interpolators output = INIT_INTERPOLATORS;
+                Interpolators output = (Interpolators)0;
 
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
@@ -323,88 +322,7 @@ Shader "Dev/Blockout"
             }
             ENDHLSL
         }
-
-        // =====================================================================
-        // SHADOW CASTER
-        // =====================================================================
-        Pass
-        {
-            Name "ShadowCaster"
-            Tags { "LightMode" = "ShadowCaster" }
-
-            ZWrite On
-            ZTest LEqual
-            ColorMask 0
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/ShadowCaster.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // DEPTH ONLY
-        // =====================================================================
-        Pass
-        {
-            Name "DepthOnly"
-            Tags { "LightMode" = "DepthOnly" }
-
-            ZWrite On
-            ColorMask R
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/DepthOnly.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // DEPTH NORMALS
-        // =====================================================================
-        Pass
-        {
-            Name "DepthNormals"
-            Tags { "LightMode" = "DepthNormals" }
-
-            ZWrite On
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/DepthNormals.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // MOTION VECTORS
-        // =====================================================================
-        Pass
-        {
-            Name "MotionVectors"
-            Tags { "LightMode" = "MotionVectors" }
-
-            ColorMask RG
-            Cull Back
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/MotionVectors.hlsl"
-            ENDHLSL
-        }
-
-        // =====================================================================
-        // META (Lightmap baking)
-        // =====================================================================
-        Pass
-        {
-            Name "Meta"
-            Tags { "LightMode" = "Meta" }
-
-            Cull Off
-
-            HLSLPROGRAM
-            #include_with_pragmas "Library/Core/Passes/Meta.hlsl"
-            ENDHLSL
-        }
+        [InjectBasePasses]
     }
 
     CustomEditor "FS.Rendering.SSRShaderGUI"

@@ -9,6 +9,7 @@ using UnityEngine;
 namespace FS.GameplayActions
 {
     [DefaultExecutionOrder(-1000)]
+    [Icon("ActionController Icon")]
     public class ActionController : MonoBehaviour, IDebugProvider
     {
         private class DisableActionsConstraint : ActionConstraintBase

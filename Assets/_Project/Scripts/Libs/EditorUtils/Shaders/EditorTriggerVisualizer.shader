@@ -124,7 +124,7 @@ Shader "Hidden/Editor/TriggerVisualizer"
 
                     i.uv /= 4;
                 }
-                else if (2 <= _ShapeType < 5) // Capsule
+                else if (_ShapeType >= 2 && _ShapeType < 5) // Capsule
                 {
                     // Handle clipping
                     if (_ShapeType == 2) // cylinder base
